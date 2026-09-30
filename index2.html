@@ -1,0 +1,1620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Mechanics Project - Impact Dynamics</title>
+  
+  <!-- PWA Meta Tags -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f1115">
+  <link rel="apple-touch-icon" href="icon.svg">
+  
+  <!-- Typography System: Anton (Heading), Lexend (Body), JetBrains Mono (Data) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=JetBrains+Mono:wght@400;500;600;700&family=Lexend:wght@300..800&display=swap" rel="stylesheet">
+  
+  <!-- MathJax Configuration for responsive scaling -->
+  <script>
+    window.MathJax = {
+      chtml: {
+        scale: 1,
+        matchFontHeight: true,
+        displayAlign: 'center'
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" id="MathJax-script" async></script>
+  <!-- Load jsPDF from CDN for local PDF generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  
+  <style>
+    :root {
+      /* Typography Tokens */
+      --font-heading: 'Anton', sans-serif;
+      --font-body: 'Lexend', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+
+      /* Spacing Tokens */
+      --space-xs: 0.25rem;
+      --space-sm: 0.5rem;
+      --space-md: 1rem;
+      --space-lg: 1.5rem;
+      --space-xl: 2rem;
+      --space-2xl: 3rem;
+
+      /* Radius Tokens */
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --radius-xl: 24px;
+
+      /* Transition Tokens */
+      --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+      
+      /* Muted Dark Theme Colors */
+      --bg-dark: #0f1115;
+      --card-bg: rgba(20, 24, 32, 0.5);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent-a: #38bdf8; /* Restrained Sky Blue */
+      --accent-a-glow: rgba(56, 189, 248, 0.15); /* Lower opacity */
+      --accent-b: #fb923c; /* Restrained Orange */
+      --accent-b-glow: rgba(251, 146, 60, 0.15); /* Lower opacity */
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+      --success: #10b981;
+      --code-bg: rgba(10, 14, 22, 0.85);
+      --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.25);
+      --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+
+    body.light-mode {
+      /* Muted Light Theme Colors */
+      --bg-dark: #f8fafc;
+      --card-bg: rgba(255, 255, 255, 0.7);
+      --card-border: rgba(0, 0, 0, 0.08);
+      --accent-a: #0284c7; 
+      --accent-a-glow: rgba(2, 132, 199, 0.12);
+      --accent-b: #ea580c; 
+      --accent-b-glow: rgba(234, 88, 12, 0.12);
+      --text-main: #0f172a;
+      --text-sub: #475569;
+      --code-bg: #e2e8f0;
+      --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.04);
+      --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.08);
+    }
+
+    * { 
+      box-sizing: border-box; margin: 0; padding: 0; 
+      font-family: var(--font-body); 
+      -webkit-tap-highlight-color: transparent; 
+      transition: border-color var(--transition-slow), color var(--transition-slow), box-shadow var(--transition-slow), background-color var(--transition-slow); 
+    }
+
+    html, body { width: 100%; min-height: 100%; color: var(--text-main); overflow-x: hidden; }
+    
+    body {
+      background: linear-gradient(-45deg, #0a0c10, #161b22, #0d1117, #0a0c10);
+      background-size: 400% 400%;
+      animation: gradientBG 15s ease infinite;
+      background-color: var(--bg-dark);
+    }
+    
+    .theme-bg-overlay {
+      position: fixed; inset: 0; z-index: -1; pointer-events: none;
+      background: linear-gradient(-45deg, #f8fafc, #e2e8f0, #cbd5e1, #f8fafc);
+      background-size: 400% 400%; animation: gradientBG 15s ease infinite;
+      opacity: 0; transition: opacity var(--transition-slow);
+    }
+    body.light-mode .theme-bg-overlay { opacity: 1; }
+
+    @keyframes gradientBG {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    .bg-grid {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none;
+      background-image: linear-gradient(to right, rgba(56, 189, 248, 0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%);
+      -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%);
+    }
+    body.light-mode .bg-grid {
+      background-image: linear-gradient(to right, rgba(2, 132, 199, 0.04) 1px, transparent 1px), linear-gradient(to bottom, rgba(2, 132, 199, 0.04) 1px, transparent 1px);
+    }
+
+    .screen { display: none; width: 100%; min-height: 100vh; position: relative; z-index: 1; opacity: 0; }
+    .screen.active { display: flex; animation: screenFadeIn 0.5s var(--transition-base) forwards; }
+    
+    @keyframes screenFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes flyInStagger { 0% { opacity: 0; transform: translateY(24px) scale(0.98); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+    @keyframes shine { to { background-position: 200% center; } }
+    
+    .scroll-reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.7s var(--transition-base), transform 0.7s var(--transition-base); will-change: opacity, transform; }
+    .scroll-reveal.revealed { opacity: 1; transform: translateY(0); }
+    
+    @keyframes cardAutoGlow {
+      0% { border-color: var(--card-border); box-shadow: var(--shadow-soft); }
+      40% { border-color: var(--accent-a); box-shadow: 0 4px 20px var(--accent-a-glow); }
+      100% { border-color: var(--card-border); box-shadow: var(--shadow-soft); }
+    }
+    .theory-card.revealed { animation: cardAutoGlow 1.2s var(--transition-slow); }
+
+    /* Standardized Buttons */
+    .btn-launch, .btn-outline, .action-btn, .icon-btn, .speed-btn, .mode-btn, .reset-btn, .step-btn {
+      position: relative; overflow: hidden; transition: all var(--transition-base);
+    }
+    
+    .btn-launch::after, .btn-outline::after, .action-btn::after, .icon-btn::after, .speed-btn::after, .mode-btn::after, .reset-btn::after, .global-theme-btn::after, .step-btn::after, .global-install-btn::after {
+      content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: linear-gradient(90deg, transparent, var(--accent-a-glow), transparent);
+      transform: translateX(-100%); pointer-events: none; z-index: 2;
+    }
+
+    @keyframes clickPulse {
+      0% { transform: scale(1); box-shadow: 0 0 0 0 var(--accent-a-glow); }
+      50% { transform: scale(0.96); box-shadow: 0 0 12px 4px var(--accent-a-glow); }
+      100% { transform: scale(1); box-shadow: var(--shadow-soft); }
+    }
+    
+    @keyframes sweepAnim {
+      0% { transform: translateX(-100%); opacity: 1; }
+      80% { transform: translateX(100%); opacity: 1; }
+      100% { transform: translateX(100%); opacity: 0; }
+    }
+
+    @keyframes sweepAnimReverse {
+      0% { transform: translateX(100%); opacity: 1; }
+      80% { transform: translateX(-100%); opacity: 1; }
+      100% { transform: translateX(-100%); opacity: 0; }
+    }
+
+    .pulse-anim { animation: clickPulse 0.4s var(--transition-base); }
+    .pulse-anim::after { animation: sweepAnim 0.6s var(--transition-base) forwards; }
+    
+    .pulse-anim-reverse { animation: clickPulse 0.4s var(--transition-base); }
+    .pulse-anim-reverse::after { animation: sweepAnimReverse 0.6s var(--transition-base) forwards; }
+
+    /* Shutter Sweep Hover Effect for primary buttons */
+    .btn-launch::before, .action-btn.btn-primary::before {
+      --tilt: 1.2rem; content: ""; position: absolute; top: 0; left: calc(-100% - var(--tilt)); width: calc(100% + var(--tilt)); height: 100%;
+      background: rgba(255, 255, 255, 0.15); clip-path: polygon(var(--tilt) 0, 100% 0, calc(100% - var(--tilt)) 100%, 0 100%);
+      transform: translateX(0); transition: transform var(--transition-slow); pointer-events: none; z-index: 1; 
+    }
+    .btn-launch:hover::before, .action-btn.btn-primary:hover::before { transform: translateX(calc(200% + var(--tilt) * 2)); }
+
+    .screen.active .anim-item { opacity: 0; animation: flyInStagger 0.7s var(--transition-base) forwards; will-change: transform, opacity; }
+    
+    .delay-1 { animation-delay: 0.10s; } .delay-2 { animation-delay: 0.20s; } .delay-3 { animation-delay: 0.30s; } .delay-4 { animation-delay: 0.40s; }
+    .delay-5 { animation-delay: 0.50s; } .delay-6 { animation-delay: 0.60s; } .delay-7 { animation-delay: 0.70s; } .delay-8 { animation-delay: 0.80s; }
+
+    /* Top Floating Buttons (Theme & Install) */
+    .global-theme-btn {
+      position: fixed; top: var(--space-md); right: var(--space-md); z-index: 9999; width: 44px; height: 44px; border-radius: 50%;
+      background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-main); font-size: 1.2rem;
+      display: flex; align-items: center; justify-content: center; cursor: pointer; backdrop-filter: blur(12px);
+      box-shadow: var(--shadow-soft); transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), background-color var(--transition-slow), width var(--transition-base), height var(--transition-base), right var(--transition-base);
+      overflow: hidden;
+    }
+    .global-theme-btn:hover { transform: scale(1.05); }
+    .global-theme-btn:active { transform: scale(0.9); transition: transform 0.1s; }
+    
+    .global-install-btn {
+      position: fixed; top: var(--space-md); right: calc(var(--space-md) + 54px); z-index: 9999;
+      background: var(--card-bg); border: 1px solid var(--accent-a); color: var(--accent-a);
+      padding: 0 16px; height: 44px; border-radius: 22px; font-weight: 600; font-size: 0.9rem;
+      display: none; align-items: center; justify-content: center; cursor: pointer;
+      backdrop-filter: blur(12px); box-shadow: 0 4px 12px var(--accent-a-glow);
+      transition: transform var(--transition-base), background-color var(--transition-slow);
+      overflow: hidden;
+    }
+    .global-install-btn:hover { transform: scale(1.05); background: var(--code-bg); }
+    .global-install-btn:active { transform: scale(0.95); transition: transform 0.1s; }
+    .global-install-btn.show { display: flex; animation: flyInStagger 0.5s forwards; }
+
+    body.sim-active .global-theme-btn { width: 38px; height: 38px; font-size: 1rem; top: var(--space-md); right: var(--space-md); }
+    body.sim-active .global-install-btn { display: none !important; }
+    
+    .blur-wrapper { position: fixed; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; z-index: 0; pointer-events: none; }
+    .blur-orb { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.3; animation: floatOrb 12s infinite alternate ease-in-out; will-change: transform; }
+    .orb-1 { width: 280px; height: 280px; background: var(--accent-a); top: 5%; left: -40px; }
+    .orb-2 { width: 340px; height: 340px; background: var(--accent-b); bottom: 10%; right: -50px; animation-duration: 16s; }
+    @keyframes floatOrb { 0% { transform: translate(0, 0) scale(1); } 100% { transform: translate(40px, -30px) scale(1.15); } }
+    
+    @media (min-width: 900px) {
+      .blur-orb { filter: blur(120px); opacity: 0.4; }
+      .orb-1 { left: 20%; top: 10%; width: 400px; height: 400px; }
+      .orb-2 { right: 20%; bottom: 10%; width: 450px; height: 450px; }
+    }
+    
+    .content-screen { flex-direction: column; align-items: center; padding: 70px var(--space-xl); max-width: 900px; margin: 0 auto; z-index: 1; }
+    
+    .badge { 
+      font-family: var(--font-heading); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 400;
+      display: inline-block; padding: 6px 14px; font-size: 0.85rem; border-radius: var(--radius-sm); 
+      background: var(--accent-a-glow); color: var(--accent-a); border: 1px solid var(--card-border); 
+      margin-bottom: var(--space-lg); box-shadow: var(--shadow-soft); 
+    }
+    
+    .hero-title { 
+      font-family: var(--font-heading); text-transform: uppercase; letter-spacing: 0.02em; font-weight: 400;
+      font-size: clamp(2.5rem, 6vw, 4rem); line-height: 1.1; text-align: center; margin-bottom: var(--space-md); 
+      background: linear-gradient(to right, var(--text-main) 20%, var(--accent-a) 50%, var(--text-main) 80%);
+      background-size: 200% auto; animation: shine 4s linear infinite; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    
+    .hero-sub { color: var(--text-sub); font-size: clamp(0.95rem, 3vw, 1.1rem); text-align: center; line-height: 1.6; margin-bottom: var(--space-2xl); max-width: 650px; }
+
+    /* Re-Styled Buttons avoiding black */
+    .intro-cta-row { display: flex; gap: var(--space-md); justify-content: center; flex-wrap: wrap; margin-bottom: var(--space-md); width: 100%; }
+    
+    .btn-launch { 
+      display: inline-flex; justify-content: center; align-items: center; gap: var(--space-sm); 
+      background: linear-gradient(135deg, var(--accent-a), #0284c7); 
+      color: #ffffff; font-weight: 600; font-size: 1.05rem; 
+      padding: var(--space-md) var(--space-2xl); border-radius: var(--radius-md); border: none; cursor: pointer; 
+      box-shadow: var(--shadow-soft); width: 100%; max-width: 320px;
+    }
+    body.light-mode .btn-launch { background: linear-gradient(135deg, var(--accent-a), #0369a1); }
+    .btn-launch:hover { transform: translateY(-2px); box-shadow: 0 6px 16px var(--accent-a-glow); }
+    body.light-mode .btn-launch:hover { box-shadow: 0 6px 16px rgba(2, 132, 199, 0.3); }
+
+    .btn-outline { 
+      display: inline-flex; justify-content: center; align-items: center; gap: var(--space-sm);
+      background: var(--code-bg); border: 1px solid var(--card-border); color: var(--text-main); font-weight: 600; font-size: 1.05rem; 
+      padding: var(--space-md) var(--space-2xl); border-radius: var(--radius-md); cursor: pointer; box-shadow: var(--shadow-soft);
+    }
+    
+    .btn-small { padding: 10px 24px; font-size: 0.95rem; }
+    body.light-mode .btn-outline { border-color: var(--card-border); color: var(--text-main); }
+    .btn-outline:hover { background: var(--card-bg); border-color: var(--accent-a); color: var(--accent-a); transform: translateY(-2px); }
+
+    .theory-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-lg); width: 100%; margin-bottom: var(--space-2xl); margin-top: var(--space-xl); }
+    @media (min-width: 768px) { .theory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .col-span-2 { grid-column: span 2; } }
+    
+    .theory-card { 
+      background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-lg); 
+      padding: clamp(1.25rem, 3vw, 2rem); backdrop-filter: blur(12px); box-shadow: var(--shadow-soft); 
+      transition: all var(--transition-base); 
+      min-width: 0; max-width: 100%; overflow-wrap: anywhere;
+    }
+    .theory-card:hover { transform: translateY(-2px); border-color: var(--accent-a); box-shadow: var(--shadow-card-hover); }
+    
+    .theory-card h3 { font-family: var(--font-heading); text-transform: uppercase; letter-spacing: 0.03em; font-size: 1.25rem; font-weight: 400; color: var(--accent-a); margin-bottom: var(--space-md); }
+    
+    .math-e { text-transform: lowercase; font-family: var(--font-body); font-style: italic; }
+
+    .theory-card p { font-size: 0.95rem; line-height: 1.6; color: var(--text-sub); margin-bottom: var(--space-md); }
+    .theory-card p:last-child { margin-bottom: 0; }
+    
+    .formula-callout { 
+      font-family: var(--font-mono); font-size: 0.95rem; background: var(--code-bg); 
+      border-left: 2px solid var(--accent-a); border-radius: var(--radius-sm); padding: var(--space-md); 
+      margin: var(--space-md) 0; overflow-x: auto; color: var(--text-main); 
+      max-width: 100%; box-sizing: border-box;
+    }
+    .formula-callout mjx-container { max-width: 100% !important; overflow-x: auto !important; overflow-y: hidden !important; padding: 4px 0; }
+    .formula-callout::-webkit-scrollbar, mjx-container::-webkit-scrollbar { height: 6px; }
+    .formula-callout::-webkit-scrollbar-thumb, mjx-container::-webkit-scrollbar-thumb { background-color: var(--card-border); border-radius: 4px; }
+
+    .demo-bounce-wrapper {
+      position: relative; width: 100%; height: 100px; overflow: hidden; border-bottom: 1px solid var(--card-border);
+      background: linear-gradient(to top, rgba(255,255,255,0.03) 1px, transparent 1px), var(--code-bg);
+      background-size: 100% 20px; margin-top: 15px; border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    }
+    body.light-mode .demo-bounce-wrapper { background: linear-gradient(to top, rgba(0,0,0,0.03) 1px, transparent 1px), var(--code-bg); background-size: 100% 20px; }
+    
+    .demo-ball { position: absolute; bottom: 0; border-radius: 50%; }
+    .ball-1 { left: calc(14% - 7px); width: 14px; height: 14px; background: var(--accent-a); box-shadow: 0 0 8px var(--accent-a-glow); animation: bounceA 4.2s infinite; }
+    .ball-2 { left: calc(32% - 5px); width: 10px; height: 10px; background: var(--text-sub); box-shadow: 0 0 6px rgba(148, 163, 184, 0.4); animation: bounceB 3.1s infinite 0.4s; }
+    .ball-3 { left: calc(50% - 8px); width: 16px; height: 16px; background: var(--accent-b); box-shadow: 0 0 8px var(--accent-b-glow); animation: bounceC 5.5s infinite 1.1s; }
+    .ball-4 { left: calc(68% - 6px); width: 12px; height: 12px; background: var(--success); box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); animation: bounceD 4.8s infinite 0.7s; }
+    .ball-5 { left: calc(86% - 7px); width: 14px; height: 14px; background: var(--accent-a); box-shadow: 0 0 8px var(--accent-a-glow); animation: bounceE 3.9s infinite 2.3s; }
+
+    @keyframes bounceA { 0% { transform: translateY(-70px); opacity: 1; animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 10% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 20% { transform: translateY(-45px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 30% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 40% { transform: translateY(-25px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 50% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 60% { transform: translateY(-12px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 68% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 74% { transform: translateY(-5px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 79% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 83% { transform: translateY(-2px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 86% { transform: translateY(0); opacity: 1; } 90% { transform: translateY(0); opacity: 0; } 92% { transform: translateY(-70px); opacity: 0; } 96% { transform: translateY(-70px); opacity: 1; } 100% { transform: translateY(-70px); opacity: 1; } }
+    @keyframes bounceB { 0% { transform: translateY(-40px); opacity: 1; animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 15% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 28% { transform: translateY(-15px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 40% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 50% { transform: translateY(-4px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 58% { transform: translateY(0); opacity: 1; } 70% { transform: translateY(0); opacity: 0; } 75% { transform: translateY(-40px); opacity: 0; } 85% { transform: translateY(-40px); opacity: 1; } 100% { transform: translateY(-40px); opacity: 1; } }
+    @keyframes bounceC { 0% { transform: translateY(-90px); opacity: 1; animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 12% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 23% { transform: translateY(-65px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 34% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 43% { transform: translateY(-42px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 52% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 60% { transform: translateY(-24px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 67% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 73% { transform: translateY(-12px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 78% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 82% { transform: translateY(-5px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 86% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 89% { transform: translateY(-2px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 91% { transform: translateY(0); opacity: 1; } 93% { transform: translateY(0); opacity: 0; } 95% { transform: translateY(-90px); opacity: 0; } 98% { transform: translateY(-90px); opacity: 1; } 100% { transform: translateY(-90px); opacity: 1; } }
+    @keyframes bounceD { 0% { transform: translateY(-55px); opacity: 1; animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 12% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 24% { transform: translateY(-28px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 35% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 45% { transform: translateY(-12px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 54% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 61% { transform: translateY(-4px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 67% { transform: translateY(0); opacity: 1; } 75% { transform: translateY(0); opacity: 0; } 80% { transform: translateY(-55px); opacity: 0; } 90% { transform: translateY(-55px); opacity: 1; } 100% { transform: translateY(-55px); opacity: 1; } }
+    @keyframes bounceE { 0% { transform: translateY(-80px); opacity: 1; animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 14% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 26% { transform: translateY(-50px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 37% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 47% { transform: translateY(-25px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 56% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 64% { transform: translateY(-10px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 71% { transform: translateY(0); animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); } 77% { transform: translateY(-3px); animation-timing-function: cubic-bezier(0.55, 0.085, 0.68, 0.53); } 81% { transform: translateY(0); opacity: 1; } 86% { transform: translateY(0); opacity: 0; } 90% { transform: translateY(-80px); opacity: 0; } 95% { transform: translateY(-80px); opacity: 1; } 100% { transform: translateY(-80px); opacity: 1; } }
+
+    /* Contributor & Guidance CSS */
+    .contributors-section { margin-top: var(--space-lg); width: 100%; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-lg); padding: var(--space-xl); text-align: center; backdrop-filter: blur(12px); box-shadow: var(--shadow-soft); }
+    .contributors-title { font-family: var(--font-heading); font-size: 1.25rem; font-weight: 400; margin-bottom: var(--space-lg); text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-main); }
+    
+    .guidance-box {
+      background: var(--code-bg); border: 1px solid var(--accent-a); border-radius: var(--radius-md);
+      padding: var(--space-md); margin: 0 auto; max-width: 400px;
+      position: relative; overflow: hidden; box-shadow: 0 4px 16px var(--accent-a-glow);
+    }
+    .guidance-box::before {
+      content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 3px;
+      background: linear-gradient(90deg, transparent, var(--accent-a), transparent);
+    }
+    .g-title { font-family: var(--font-heading); color: var(--accent-a); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+    .g-name { font-size: 1.15rem; font-weight: 600; color: var(--text-main); margin-bottom: 0; }
+    .g-desc { font-size: 0.95rem; color: var(--text-sub); line-height: 1.6; margin: 0 auto var(--space-lg); }
+
+    .contributors-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-md); margin-top: var(--space-xl); }
+    .contributor-card { position: relative; background: var(--code-bg); border: 1px solid var(--card-border); padding: var(--space-md); border-radius: var(--radius-md); transition: transform 0.2s ease; }
+    .contributor-card:hover { transform: translateY(-2px); border-color: var(--accent-a); }
+    .contributor-card.lead-dev { border-color: var(--accent-a); box-shadow: 0 0 12px var(--accent-a-glow); margin-top: 10px; }
+    .lead-dev-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--accent-a); color: var(--bg-dark); font-family: var(--font-heading); font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 10px; border-radius: 12px; white-space: nowrap; }
+    .c-name { font-size: 0.95rem; font-weight: 600; color: var(--text-main); margin-bottom: 4px; }
+    .c-branch { font-family: var(--font-mono); font-size: 0.75rem; font-weight: 500; color: var(--accent-a); }
+
+    /* Simulation Screen */
+    #sim-screen { height: 100vh; flex-direction: row; overflow: hidden; }
+    @media (max-width: 900px) { 
+      #sim-screen { flex-direction: column; } 
+    }
+    
+    #canvas-container { flex: 1; position: relative; overflow: hidden; background: transparent; }
+    #simCanvas { display: block; width: 100%; height: 100%; }
+
+    .top-bar-overlay { position: absolute; top: var(--space-md); display: flex; gap: 12px; z-index: 20; transition: top var(--transition-slow); }
+    .left-overlay { left: var(--space-md); }
+    .right-overlay { right: 70px; }
+    
+    .icon-btn { background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-main); padding: 12px 18px; border-radius: var(--radius-md); cursor: pointer; font-size: 0.9rem; font-weight: 500; backdrop-filter: blur(12px); box-shadow: var(--shadow-soft); display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .icon-btn:hover { background: var(--code-bg); transform: translateY(-1px); border-color: var(--accent-a); }
+    .icon-btn.active-toggle { border-color: var(--accent-a); color: var(--accent-a); }
+
+    #sim-panel { width: 440px; background: var(--card-bg); backdrop-filter: blur(12px); border-left: 1px solid var(--card-border); display: flex; flex-direction: column; padding: var(--space-xl) 28px; gap: var(--space-lg); overflow-y: auto; z-index: 10; box-shadow: var(--shadow-soft); }
+    
+    /* Mobile Overrides for Simulation Page */
+    @media (max-width: 900px) { 
+      #sim-panel { width: 100%; height: 60%; border-left: none; border-top: 1px solid var(--card-border); border-radius: var(--radius-xl) var(--radius-xl) 0 0; padding: var(--space-lg) var(--space-md); } 
+      
+      .top-bar-overlay { top: 8px; }
+      .left-overlay { left: 8px; }
+      .right-overlay { right: 50px; }
+      .icon-btn { padding: 8px 12px; font-size: 0.8rem; }
+      .icon-btn svg { width: 14px; height: 14px; }
+      
+      body.sim-active .global-theme-btn { 
+        top: 8px; right: 8px; width: 32px; height: 32px; font-size: 0.8rem; 
+      }
+    }
+    
+    .panel-header { display: flex; justify-content: space-between; align-items: center; }
+    .panel-header h2 { font-family: var(--font-heading); font-size: 1.5rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.02em; }
+    
+    .btn-row { display: flex; gap: var(--space-sm); }
+    .action-btn { flex: 1.5; padding: 14px 10px; border-radius: var(--radius-md); border: none; font-weight: 600; cursor: pointer; font-size: 0.95rem; color: #000; display: flex; justify-content: center; align-items: center; gap: 6px; box-shadow: var(--shadow-soft); }
+    .action-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(255,255,255,0.1); }
+    body.light-mode .action-btn:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+
+    .btn-primary { background: linear-gradient(135deg, var(--accent-a), #0284c7); color: #ffffff; border: none; }
+    body.light-mode .btn-primary { background: linear-gradient(135deg, var(--accent-a), #0369a1); color: #ffffff; }
+    
+    .btn-secondary { background: var(--code-bg); border: 1px solid var(--card-border); color: var(--text-main); box-shadow: none; }
+    .btn-secondary:hover { border-color: var(--text-sub); }
+    .btn-secondary.paused { background: rgba(251, 146, 60, 0.1); border-color: var(--accent-b); color: var(--accent-b); }
+
+    .speed-control { flex: 2; display: flex; align-items: stretch; background: var(--code-bg); border: 1px solid var(--card-border); border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--shadow-soft); }
+    .speed-btn { background: transparent; border: none; color: var(--text-sub); padding: 0 14px; cursor: pointer; transition: background 0.2s, color 0.2s; display: flex; align-items: center; justify-content: center; }
+    .speed-btn:hover { background: rgba(56, 189, 248, 0.1); color: var(--accent-a); }
+    .speed-val { flex: 1; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 0.95rem; color: var(--text-main); }
+
+    .mode-switcher { display: flex; background: var(--code-bg); border: 1px solid var(--card-border); border-radius: var(--radius-md); padding: 6px; gap: 6px; }
+    .mode-btn { flex: 1; padding: 8px; border: none; background: transparent; color: var(--text-sub); font-weight: 500; font-size: 0.9rem; border-radius: var(--radius-sm); cursor: pointer; }
+    .mode-btn.active { background: var(--card-bg); color: var(--text-main); box-shadow: var(--shadow-soft); border: 1px solid var(--card-border); }
+
+    .sim-mode-section { display: none; flex-direction: column; gap: var(--space-md); }
+    .sim-mode-section.active { display: flex; }
+
+    .control-box { background: var(--code-bg); border: 1px solid var(--card-border); padding: var(--space-md); border-radius: var(--radius-md); display: flex; flex-direction: column; gap: 12px; transition: border-color var(--transition-base); }
+    .control-box:focus-within { border-color: var(--accent-a); }
+    
+    .control-label { display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; font-weight: 500; color: var(--text-main); }
+    .control-label span:last-child { font-family: var(--font-mono); color: var(--text-sub); font-size: 0.95rem; }
+    
+    .reset-btn { background: transparent; border: none; color: var(--text-sub); cursor: pointer; font-size: 1rem; margin-left: 8px; padding: 2px 6px; border-radius: var(--radius-sm); transition: transform var(--transition-base), color var(--transition-base); display: inline-flex; align-items: center; justify-content: center; }
+    .reset-btn:hover { color: var(--accent-a); transform: rotate(-180deg); background: var(--card-border); }
+
+    .slider-container { display: flex; align-items: center; gap: 10px; width: 100%; }
+    .step-btn { background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-sub); width: 28px; height: 28px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.1rem; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+    .step-btn:hover { background: var(--code-bg); border-color: var(--accent-a); color: var(--accent-a); }
+    .step-btn:active { transform: scale(0.9); }
+
+    input[type="range"] { -webkit-appearance: none; width: 100%; height: 6px; background: var(--card-bg); border-radius: 3px; outline: none; margin: 6px 0; border: 1px solid var(--card-border); pointer-events: none; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--text-main); cursor: pointer; box-shadow: var(--shadow-soft); border: 1px solid var(--card-border); pointer-events: auto; transition: transform 0.1s; }
+    input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--text-main); cursor: pointer; box-shadow: var(--shadow-soft); border: 1px solid var(--card-border); pointer-events: auto; }
+    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+    input[type="range"]:disabled::-webkit-slider-thumb { cursor: not-allowed; background: var(--text-sub); border-color: var(--card-bg); }
+
+    select#preset-a, select#preset-b { display: none; }
+    .custom-select-wrapper { position: relative; width: 100%; font-size: 0.95rem; font-weight: 500; outline: none; }
+    .custom-select-trigger { display: flex; justify-content: space-between; align-items: center; width: 100%; background: var(--card-bg); color: var(--text-main); border: 1px solid var(--card-border); padding: 10px 14px; border-radius: var(--radius-sm); cursor: pointer; transition: all 0.2s ease; }
+    .custom-select-trigger:hover, .custom-select-wrapper.open .custom-select-trigger { border-color: var(--accent-a); }
+    .custom-select-trigger svg { width: 16px; height: 16px; transition: transform 0.2s; }
+    .custom-select-wrapper.open .custom-select-trigger svg { transform: rotate(180deg); }
+    
+    .custom-select-options { position: fixed; z-index: 9999; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-sm); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); opacity: 0; visibility: hidden; transform: translateY(-4px); transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s ease; list-style: none; overflow: hidden; box-shadow: var(--shadow-soft); padding: 4px 0; }
+    .custom-select-options.open { opacity: 1; visibility: visible; transform: translateY(0); }
+    .custom-select-option { padding: 10px 14px; cursor: pointer; color: var(--text-main); transition: background 0.2s, color 0.2s; }
+    .custom-select-option:hover { background: var(--bg-dark); color: var(--accent-a); }
+
+    #wrapper-preset-b.open .custom-select-trigger, #wrapper-preset-b .custom-select-trigger:hover { border-color: var(--accent-b); }
+    #options-wrapper-preset-b .custom-select-option:hover { color: var(--accent-b); }
+
+    .log-box { flex: 1; min-height: 250px; background: var(--code-bg); border: 1px solid var(--card-border); border-radius: var(--radius-md); padding: var(--space-md); font-family: var(--font-mono); font-size: 0.85rem; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; backdrop-filter: blur(12px); }
+    
+    .log-header-single { display: grid; grid-template-columns: 0.8fr 1.1fr 1.1fr; border-bottom: 1px solid var(--card-border); padding-bottom: 8px; font-weight: bold; color: var(--text-sub); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .log-row-single { display: grid; grid-template-columns: 0.8fr 1.1fr 1.1fr; padding: 8px 0; border-bottom: 1px solid rgba(128,128,128,0.1); align-items: center; color: var(--text-main); }
+
+    .log-header-dual { display: grid; grid-template-columns: 0.7fr 0.8fr 1.2fr 1.2fr; border-bottom: 1px solid var(--card-border); padding-bottom: 8px; font-weight: bold; color: var(--text-sub); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.02em; }
+    .log-row-dual { display: grid; grid-template-columns: 0.7fr 0.8fr 1.2fr 1.2fr; padding: 8px 0; border-bottom: 1px solid rgba(128,128,128,0.1); align-items: center; color: var(--text-main); font-size: 0.8rem; }
+
+    @media (max-width: 768px) {
+      body { animation: none !important; background-size: 100% 100% !important; background: linear-gradient(-45deg, #0a0c10, #161b22, #0d1117, #0a0c10) !important; }
+      body.light-mode { background: linear-gradient(-45deg, #f8fafc, #cbd5e1, #e2e8f0, #f8fafc) !important; }
+      .theme-bg-overlay { display: none; }
+      .blur-orb { filter: blur(40px) !important; animation: none !important; }
+      .theory-card, #sim-panel, .global-theme-btn, .global-install-btn, .icon-btn, .contributors-section, .log-box {
+        backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+        background-color: var(--card-bg) !important;
+      }
+      .bg-grid { opacity: 0.4; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Background Overlays -->
+  <div class="theme-bg-overlay"></div>
+  <div class="bg-grid"></div>
+  <div class="blur-wrapper"><div class="blur-orb orb-1"></div><div class="blur-orb orb-2"></div></div>
+  
+  <button id="global-theme-toggle" class="global-theme-btn" title="Toggle Light/Dark Mode">
+    <svg id="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+    <svg id="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+  </button>
+
+  <button id="btn-install" class="global-install-btn">↓ Install App</button>
+
+  <!-- PAGE 1: INTRODUCTION -->
+  <main class="screen active content-screen" id="intro-screen">
+    <div class="badge anim-item delay-1">College Mechanics Project</div>
+    <h1 class="hero-title anim-item delay-2">Coefficient of Restitution:<br>Impact Dynamics</h1>
+    <p class="hero-sub anim-item delay-3">An elegant interactive laboratory evaluating the physical properties of collisions, mechanical energy dissipation, and kinematic restitution.</p>
+    
+    <button class="btn-launch anim-item delay-4" id="btn-intro-launch-sim" style="margin-top: var(--space-sm);">Launch Simulation</button>
+
+    <div class="intro-cta-row anim-item delay-5" style="margin-top: var(--space-md);">
+      <button class="btn-outline btn-small" id="btn-nav-theory">Theory</button>
+      <button class="btn-outline btn-small" id="btn-nav-procedure">Procedure</button>
+    </div>
+    
+    <div class="theory-grid anim-item delay-6" style="grid-template-columns: minmax(0, 1fr);">
+      <div class="theory-card">
+        <h3>What is the Coefficient of Restitution?</h3>
+        <p>The <strong>Coefficient of Restitution (e)</strong> is a dimensionless parameter quantifying the elasticity of a collision between two bodies. It represents the ratio of the final relative separation velocity to the initial relative approach velocity.</p>
+        <div class="formula-callout">\[e = \frac{v_{\text{separation}}}{u_{\text{approach}}}\]</div>
+        <p>A value of \(e = 1\) represents a perfectly elastic collision with no kinetic energy loss. A value of \(e = 0\) represents a perfectly plastic collision where objects stick. Natural materials fall in between (\(0 < e < 1\)).</p>
+      </div>
+    </div>
+
+    <!-- Contributors Section -->
+    <div class="contributors-section scroll-reveal">
+      
+      <!-- Moved Text Above the Guidance Box -->
+      <p class="g-desc">This project was developed by the students of Saint John College of Engineering and Management. First year batch(div D) of the academic year 2026-2027.</p>
+      
+      <!-- Guidance Box -->
+      <div class="guidance-box">
+        <div class="g-title">Project Guidance Instructor</div>
+        <div class="g-name">Mr. Avinash Chavan</div>
+      </div>
+
+      <div class="contributors-title" style="margin-top: var(--space-xl);">Contributors</div>
+
+      <!-- Student Grid -->
+      <div class="contributors-grid">
+        <div class="contributor-card lead-dev">
+          <span class="lead-dev-badge">Developer</span>
+          <div class="c-name">Harshit Sankhe</div>
+          <div class="c-branch">ECS 28</div>
+          <!-- Harshit's Email -->
+          <div style="font-size: 0.8rem; color: var(--text-sub); margin-top: 6px;">sankheharshit@gmail.com</div>
+        </div>
+        <div class="contributor-card"><div class="c-name">Aayushi Mhaskar</div><div class="c-branch">ECS 15</div></div>
+        <div class="contributor-card"><div class="c-name">Pranav Kotkar</div><div class="c-branch">MECH 11</div></div>
+        <div class="contributor-card"><div class="c-name">Omkar Singh</div><div class="c-branch">IT 31</div></div>
+        <div class="contributor-card"><div class="c-name">Mugdha Jagtap</div><div class="c-branch">IT 09</div></div>
+        <div class="contributor-card"><div class="c-name">Piyush Gupta</div><div class="c-branch">ECS 07</div></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- PAGE 2: THEORY & METHODOLOGY -->
+  <main class="screen content-screen" id="start-screen">
+    <!-- Compact Top-Left Return Icon -->
+    <div class="top-bar-overlay left-overlay anim-item delay-1">
+      <button class="icon-btn" id="btn-theory-back">&larr; Back</button>
+    </div>
+
+    <div class="badge anim-item delay-1">Methodology</div>
+    <h1 class="hero-title anim-item delay-2">Theoretical Framework</h1>
+    <p class="hero-sub anim-item delay-3">Review the governing equations and experimental procedure used to derive the restitution coefficient before entering the laboratory.</p>
+    
+    <button class="btn-launch anim-item delay-4" id="btn-launch-sim-theory" style="margin-top: var(--space-md);">Launch Simulation Lab</button>
+
+    <div class="theory-grid">
+      <div class="theory-card scroll-reveal">
+        <h3>Impulse-Momentum & Restitution</h3>
+        <p>The <strong>Coefficient of Restitution (e)</strong> is fundamentally derived from the impulse-momentum principle as the ratio of relative separation velocity to relative approach velocity for two colliding bodies A and B:</p>
+        <div class="formula-callout">\[v_B' - v_A' = e(v_A - v_B)\]</div>
+        <p>For a direct central impact with a surface of "infinite mass" (like the ground, where \(v_B = v_B' = 0\)), this simplifies to:</p>
+        <div class="formula-callout">\[v_A' = -e \cdot v_A\]</div>
+        <p>Meaning the rebound velocity magnitude is \(e\) times the impact velocity magnitude. <strong>This simulation explicitly models this ground-impact case.</strong></p>
+        <p><em>Boundary cases:</em> \(e=0\) represents a perfectly plastic impact (objects stick, energy lost), while \(e=1\) represents a perfectly elastic impact (no energy loss). Real materials fall between these extremes.</p>
+      </div>
+
+      <div class="theory-card scroll-reveal">
+        <h3>Kinematics of the Drop</h3>
+        <p>By applying Torricelli's equation (\(v^2 = u^2 + 2gh\)), we find the initial impact velocity \(v_0 = \sqrt{2gh_0}\). Over repeated bounces, velocity decays exponentially with each impact:</p>
+        <div class="formula-callout">\[v_n = e^n \cdot v_0\]</div>
+        <p>Because kinetic energy relates to velocity squared, and height relates linearly to energy (\(PE = mgh\)), the spatial height decays corresponding to the square of \(e\):</p>
+        <div class="formula-callout">\[h_n = h_0 \cdot e^{2n}\]</div>
+        <p>These two relations—velocity and height—are two views of the same underlying physical kinematic dissipation.</p>
+      </div>
+
+      <div class="theory-card scroll-reveal">
+        <h3>Measuring '<span class="math-e">e</span>' Experimentally</h3>
+        <p>While this simulation uses an idealized environment (omitting air resistance), real physical laboratories rely on dropping specimens and recording their motion paths via sensors or high-speed cameras.</p>
+        <p>By measuring the experimental ratio of initial drop height (\(h\)) and rebound height (\(h'\)) after \(n\) bounces, we can reverse-engineer the true physical \(e\) value without directly measuring complex energy dissipation. The height-based relation rearranged provides a practical methodology:</p>
+        <div class="formula-callout">\[e = \left(\frac{h'}{h}\right)^{\frac{1}{2n}}\]</div>
+      </div>
+
+      <!-- New Card A -->
+      <div class="theory-card scroll-reveal">
+        <h3>History & Definitions of <span class="math-e">e</span></h3>
+        <p>The coefficient of restitution was first formulated by Sir Isaac Newton in 1687 as an experimental law: the relative speed of separation of two bodies after collision is proportional to their relative speed of approach before it. The constant of proportionality is e. Newton's law is phenomenological—it lets us predict post-collision velocities without knowing the detailed forces during the impact.</p>
+        <p>Important property: e belongs to a <strong>pair of surfaces</strong>, not to a single object. A ball colliding with two different surfaces has two different e values.</p>
+        <p>Three formal definitions exist in the literature, which agree for simple direct (head-on, frictionless) impacts like this simulation but can differ for oblique, rough or eccentric impacts:</p>
+        <div style="margin-top: var(--space-md); font-size: 0.95rem; color: var(--text-sub);">
+          <div style="margin-bottom: 8px;"><strong>Kinematic (Newton):</strong> Ratio of relative velocities after/before impact — the one used in this simulation.</div>
+          <div style="margin-bottom: 8px;"><strong>Kinetic (Poisson):</strong> Ratio of the impulse during the restitution phase to the impulse during the compression (deformation) phase.</div>
+          <div><strong>Energetic (Stronge):</strong> Defined through the work done by the contact force during restitution vs. compression, i.e. \(e^2 = -W_{\text{restitution}} / W_{\text{compression}}\).</div>
+        </div>
+      </div>
+
+      <!-- New Card B -->
+      <div class="theory-card scroll-reveal">
+        <h3>Energy Loss per Bounce</h3>
+        <p>Kinetic energy scales with \(v^2\), so the fraction of kinetic energy kept in a single impact is \(e^2\):</p>
+        <div class="formula-callout">\[ \frac{KE_{\text{after}}}{KE_{\text{before}}} = e^2 \]</div>
+        <p>Fraction of the original energy remaining after n bounces, and the percentage lost:</p>
+        <div class="formula-callout">\[ \frac{KE_n}{KE_0} = e^{2n} \qquad \text{Energy lost} = (1 - e^{2n}) \times 100\% \]</div>
+        <p>Physically, the "lost" energy is not destroyed; it is converted to heat, sound, and internal vibrations / plastic deformation of the ball and surface. This simulation is deliberately idealised (no air drag, e constant) so the only dissipation is the factor e at each impact.</p>
+        <div class="formula-callout" style="border-left-color: var(--accent-b);">
+          <strong>Example:</strong> For \(e=0.8\), each bounce keeps 64% of the energy (\(0.8^2 = 0.64\)) and reaches 64% of the previous height.
+        </div>
+      </div>
+
+      <!-- New Card D -->
+      <div class="theory-card scroll-reveal">
+        <h3>Factors That Affect <span class="math-e">e</span></h3>
+        <ul style="padding-left: 20px; font-size: 0.95rem; color: var(--text-sub); line-height: 1.6; display: flex; flex-direction: column; gap: 10px;">
+          <li><strong>Materials of BOTH bodies:</strong> e is a property of the pair (e.g. the same ball bounces differently on steel, wood, and carpet).</li>
+          <li><strong>Impact velocity:</strong> e generally decreases as impact speed rises, because higher speeds cause more plastic deformation. Sports-ball drop tests show measured COR falling as drop height (and therefore impact velocity) increases. Example: a steel ball at ~1 m/s has \(e \approx 0.65\), dropping to about 0.55 at ~10 m/s.</li>
+          <li><strong>Temperature:</strong> For rubber and similar polymers, resilience (and therefore e) rises with temperature over roughly the 0°C to 100°C range; a cold rubber ball bounces noticeably less. Some metals become more brittle at very low temperatures, lowering e.</li>
+          <li><strong>Shape, size and construction:</strong> Multi-layer balls (e.g. golf balls with a core, mantle and cover) are engineered so their COR meets standards.</li>
+          <li><strong>Spin and angle of impact:</strong> This lab models a purely vertical, non-spinning drop; oblique impacts only apply e to the velocity component along the line of impact (normal to the surface).</li>
+        </ul>
+        <p style="margin-top: 15px;"><em>Note:</em> Because of velocity dependence, the constant e used in this simulation is an idealisation valid over a modest range of impact speeds.</p>
+      </div>
+
+      <!-- New Card C -->
+      <div class="theory-card scroll-reveal col-span-2">
+        <h3>Total Distance and Total Time</h3>
+        <p>The ball bounces infinitely many times but comes to rest in a finite time and travels a finite distance, because the bounce heights and durations form geometric series with ratio less than 1.</p>
+        <p>Total vertical distance travelled (drop + all up-and-down segments):</p>
+        <div class="formula-callout">\[ D = h_0 + 2h_0\left(e^2 + e^4 + e^6 + \dots\right) = h_0 \frac{1+e^2}{1-e^2} \]</div>
+        <p>Total time until the ball comes to rest:</p>
+        <div class="formula-callout">\[ T = \sqrt{\frac{2h_0}{g}} \cdot \frac{1+e}{1-e} \]</div>
+        <p><strong>Derivation hint:</strong> The first fall takes \(t_0 = \sqrt{2h_0/g}\), and every later rise-and-fall takes \(2 t_0 e^n\) for bounce n, so \(T = t_0\left(1 + 2\sum_{n=1}^{\infty} e^n\right)\).</p>
+        <div class="formula-callout" style="border-left-color: var(--success);">
+          <strong>Verified Example:</strong> For \(h_0 = 1\text{ m}\), \(e = 0.5\), \(g = 9.8\text{ m/s}^2\) the ball travels a total of 1.667 m (≈1.67 m) and comes to rest after 1.355 s (≈1.36 s).
+        </div>
+      </div>
+
+      <div class="theory-card scroll-reveal col-span-2">
+        <h3>Visualizing Restitution</h3>
+        <p>Because energy is lost on each impact, every successive rebound reaches a fraction of its previous apex. Our simulation visualizes this spatial decay continuously.</p>
+        <div class="demo-bounce-wrapper">
+          <div class="demo-ball ball-1"></div>
+          <div class="demo-ball ball-2"></div>
+          <div class="demo-ball ball-3"></div>
+          <div class="demo-ball ball-4"></div>
+          <div class="demo-ball ball-5"></div>
+        </div>
+      </div>
+
+      <!-- New Card E -->
+      <div class="theory-card scroll-reveal col-span-2">
+        <h3>Typical Values of <span class="math-e">e</span></h3>
+        <p>Approximate values—depend on surface, velocity and temperature:</p>
+        <div style="overflow-x: auto; margin-top: var(--space-md);">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.95rem; color: var(--text-main);">
+            <thead>
+              <tr style="border-bottom: 1px solid var(--card-border);">
+                <th style="padding: 10px; color: var(--accent-a); font-weight: 600;">Situation</th>
+                <th style="padding: 10px; color: var(--accent-a); font-weight: 600;">Approx. e</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid rgba(128,128,128,0.1);">
+                <td style="padding: 10px;">Perfectly elastic (ideal limit)</td>
+                <td style="padding: 10px; font-family: var(--font-mono);">1.00</td>
+              </tr>
+              <tr style="border-bottom: 1px solid rgba(128,128,128,0.1);">
+                <td style="padding: 10px;">Rubber ball on a hard surface</td>
+                <td style="padding: 10px; font-family: var(--font-mono);">0.85-0.95</td>
+              </tr>
+              <tr style="border-bottom: 1px solid rgba(128,128,128,0.1);">
+                <td style="padding: 10px;">Steel ball on steel</td>
+                <td style="padding: 10px; font-family: var(--font-mono);">0.60-0.70</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px;">Perfectly inelastic (ideal limit)</td>
+                <td style="padding: 10px; font-family: var(--font-mono);">0.00</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin-top: var(--space-md); font-size: 0.85rem;"><em>The simulation's material presets use their own values—see the Material dropdown.</em></p>
+      </div>
+
+      <!-- New Card F -->
+      <div class="theory-card scroll-reveal">
+        <h3>Real-World Applications</h3>
+        <ul style="padding-left: 20px; font-size: 0.95rem; color: var(--text-sub); line-height: 1.6; display: flex; flex-direction: column; gap: 10px;">
+          <li><strong>Sports:</strong> Tennis, golf, cricket, basketball and football governing bodies specify ball COR/bounce limits so equipment plays consistently (e.g. golf balls must meet a maximum initial-velocity standard that is closely tied to core COR).</li>
+          <li><strong>Vehicle crash analysis:</strong> Restitution determines how much relative velocity is recovered after impact.</li>
+          <li><strong>Engineering & robotics:</strong> Modelling impacts in machines, legged robots and packaging/drop-test design.</li>
+          <li><strong>Safety:</strong> Playground surfaces and protective equipment are designed for low e (energy absorbing).</li>
+        </ul>
+      </div>
+
+      <!-- New Card G -->
+      <div class="theory-card scroll-reveal">
+        <h3>Limitations of the Model</h3>
+        <ul style="padding-left: 20px; font-size: 0.95rem; color: var(--text-sub); line-height: 1.6; display: flex; flex-direction: column; gap: 10px;">
+          <li>Assumes e is constant, but real e varies with impact velocity and temperature.</li>
+          <li>Ignores air resistance (small for dense balls at low speed, but significant for light balls dropped from large heights).</li>
+          <li>Models only vertical, frictionless, non-rotating impacts.</li>
+          <li>Treats the ball as a point particle: no contact-time, no vibration of the ball or floor, and assumes the floor has effectively infinite mass.</li>
+          <li>Real balls eventually stop bouncing after a finite number of visible bounces once the rebound height falls below the surface roughness / resolution scale, even though the ideal maths predicts infinitely many.</li>
+        </ul>
+      </div>
+    </div>
+    
+    <!-- Footer Added -->
+    <p class="hero-sub" style="font-size:0.8rem; margin-top: var(--space-xl); width: 100%;">Further reading: Wikipedia - Coefficient of restitution; Physics LibreTexts - Classical Mechanics (Tatum), Ch. 5.2 Bouncing Balls; The Physics Factbook - Coefficients of Restitution; Marchewka et al., Physics Education 56 (2021) – derivation of Newton's experimental law from energy considerations; M.D. Dayal, Engineering Mechanics: Statics and Dynamics, §12.7.</p>
+  </main>
+
+  <!-- PAGE 3: TEXT-ONLY PROCEDURE -->
+  <main class="screen content-screen" id="procedure-screen">
+    <!-- Compact Top-Left Return Icon -->
+    <div class="top-bar-overlay left-overlay anim-item delay-1">
+      <button class="icon-btn" id="btn-procedure-back">&larr; Back</button>
+    </div>
+
+    <div class="badge anim-item delay-1">Instructions</div>
+    <h1 class="hero-title anim-item delay-2">Laboratory Procedure</h1>
+    <p class="hero-sub anim-item delay-3">Step-by-step instructions for interacting with the physics simulator and exporting your experimental data.</p>
+    
+    <button class="btn-launch anim-item delay-4" id="btn-launch-sim-proc" style="margin-top: var(--space-md);">Launch Simulation Lab</button>
+
+    <div class="theory-grid" style="grid-template-columns: minmax(0, 1fr);">
+      <div class="theory-card scroll-reveal">
+        <h3>1. Operating Modes & Drop Controls</h3>
+        <p>Locate the <strong>Mode Switcher</strong> at the top of the control panel. Select <strong>Single Mode</strong> for isolated experiments or <strong>Compare Mode</strong> to drop two materials simultaneously.</p>
+        <p>Click the <strong>Drop</strong> button to release the objects from rest, and <strong>Pause</strong> to temporarily halt kinematics. The speed controls (<strong>&lt; 1x &gt;</strong>) allow you to accelerate or decelerate the time scale up to 10x for rapid testing.</p>
+      </div>
+
+      <div class="theory-card scroll-reveal">
+        <h3>2. Selecting Materials</h3>
+        <p>Use the dropdown menus under <strong>Primary Material</strong> (and Secondary Material in Compare Mode) to select from standard natural presets like Steel, Wood, or Rubber.</p>
+        <p>To manually set the coefficient of restitution, select <strong>Custom</strong> from the dropdown. This unlocks the slider directly below it, allowing you to define a specific <span class="math-e">e</span> value between 0.01 and 0.99.</p>
+      </div>
+
+      <div class="theory-card scroll-reveal">
+        <h3>3. Adjusting Environmental Parameters</h3>
+        <p>Adjust the <strong>Drop Height (h₀)</strong> slider to determine the starting potential energy (up to 100 meters).</p>
+        <p>Modify the <strong>Gravity (g)</strong> slider to observe how gravitational acceleration alters the kinematic equations. Use the circular reset arrow (↺) next to Gravity to instantly snap back to standard Earth gravity (9.81 m/s²).</p>
+      </div>
+
+      <div class="theory-card scroll-reveal">
+        <h3>4. Data Collection & Export</h3>
+        <p>As the simulation runs, the system accurately logs the spatial decay (rebound height) and kinetic energy retention per bounce in the <strong>Apex Log</strong> at the bottom of the panel.</p>
+        <p>Once your experiment is complete, click the <strong>📄 PDF</strong> button to download a formatted lab report, or <strong>🧮 Calcs</strong> to view the step-by-step mathematical derivation for the first four impacts.</p>
+      </div>
+    </div>
+  </main>
+  
+  <!-- PAGE 4: SIMULATION LABORATORY -->
+  <section class="screen" id="sim-screen">
+    <div id="canvas-container" class="anim-item delay-1">
+      <div class="top-bar-overlay left-overlay">
+        <button class="icon-btn" id="btn-return">&larr; Return</button>
+      </div>
+      <div class="top-bar-overlay right-overlay">
+        <button class="icon-btn" id="btn-sound">
+          <svg id="icon-sound-on" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+          <svg id="icon-sound-off" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+          <span id="text-sound">Sound: ON</span>
+        </button>
+      </div>
+      <canvas id="simCanvas"></canvas>
+    </div>
+
+    <!-- UI Panel -->
+    <aside id="sim-panel">
+      <div class="panel-header anim-item delay-1"><h2>Laboratory Controls</h2></div>
+      
+      <div class="btn-row anim-item delay-2">
+        <button class="action-btn btn-primary" id="btn-drop">Drop</button>
+        <button class="action-btn btn-secondary" id="btn-playpause">
+          <svg id="icon-pause" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+          <svg id="icon-play" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          <span id="text-playpause">Pause</span>
+        </button>
+        <div class="speed-control">
+          <button id="btn-speed-down" class="speed-btn" aria-label="Decrease Speed">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <div class="speed-val" id="txt-speed">1x</div>
+          <button id="btn-speed-up" class="speed-btn" aria-label="Increase Speed">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="mode-switcher anim-item delay-3">
+        <button class="mode-btn active" data-mode="single">Single Mode</button>
+        <button class="mode-btn" data-mode="dual">Compare Mode</button>
+      </div>
+
+      <!-- BALL A -->
+      <div class="control-box anim-item delay-4">
+        <div class="control-label"><span style="color:var(--accent-a)">Primary Material (Ball A)</span><span id="txt-e-a">0.88</span></div>
+        <select id="preset-a">
+          <option value="superball">Superball (e = 0.88)</option>
+          <option value="tennis">Tennis Ball (e = 0.72)</option>
+          <option value="wood">Solid Wood (e = 0.60)</option>
+          <option value="steel">Steel Bearing (e = 0.65)</option>
+          <option value="clay">Clay (e = 0.05)</option>
+          <option value="custom">Custom Ball</option>
+        </select>
+        <div class="slider-container">
+          <button class="step-btn" id="btn-dec-ea" title="Decrease">-</button>
+          <input type="range" id="param-e-a" class="slider-a" min="0.01" max="0.99" step="0.01" value="0.88" />
+          <button class="step-btn" id="btn-inc-ea" title="Increase">+</button>
+        </div>
+      </div>
+
+      <!-- BALL B -->
+      <div class="sim-mode-section anim-item delay-4" id="mode-dual">
+        <div class="control-box">
+          <div class="control-label"><span style="color:var(--accent-b)">Secondary Material (Ball B)</span><span id="txt-e-b">0.60</span></div>
+          <select id="preset-b">
+            <option value="wood" selected>Solid Wood (e = 0.60)</option>
+            <option value="superball">Superball (e = 0.88)</option>
+            <option value="tennis">Tennis Ball (e = 0.72)</option>
+            <option value="steel">Steel Bearing (e = 0.65)</option>
+            <option value="clay">Clay (e = 0.05)</option>
+            <option value="custom">Custom Ball</option>
+          </select>
+          <div class="slider-container">
+            <button class="step-btn" id="btn-dec-eb" title="Decrease">-</button>
+            <input type="range" id="param-e-b" class="slider-b" min="0.01" max="0.99" step="0.01" value="0.60" />
+            <button class="step-btn" id="btn-inc-eb" title="Increase">+</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="control-box anim-item delay-5">
+        <div class="control-label"><span>Drop Height (h₀)</span><span id="txt-h">6.0 m</span></div>
+        <div class="slider-container">
+          <button class="step-btn" id="btn-dec-h" title="Decrease">-</button>
+          <input type="range" id="param-h" min="1.0" max="100.0" step="0.5" value="6.0" />
+          <button class="step-btn" id="btn-inc-h" title="Increase">+</button>
+        </div>
+      </div>
+      
+      <div class="control-box anim-item delay-6">
+        <div class="control-label">
+          <span>Gravity (g) <button id="btn-reset-g" class="reset-btn" title="Reset to 9.81">↺</button></span>
+          <span id="txt-g">9.81 m/s²</span>
+        </div>
+        <div class="slider-container">
+          <button class="step-btn" id="btn-dec-g" title="Decrease">-</button>
+          <input type="range" id="param-g" min="2.0" max="25.0" step="0.1" value="9.81" />
+          <button class="step-btn" id="btn-inc-g" title="Increase">+</button>
+        </div>
+      </div>
+
+      <div class="anim-item delay-7" style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+        <span style="font-size:0.85rem; font-weight:500; color:var(--text-sub); text-transform:uppercase; font-family:var(--font-heading); letter-spacing:0.02em;">Apex Log</span>
+        <div style="display:flex; gap:6px;">
+          <button id="btn-pdf" class="icon-btn" style="padding: 4px 8px; font-size: 0.75rem; border-radius:var(--radius-sm);" title="Download Log as PDF">📄 PDF</button>
+          <button id="btn-calc" class="icon-btn" style="padding: 4px 8px; font-size: 0.75rem; border-radius:var(--radius-sm);" title="View Calculations">🧮 Calcs</button>
+        </div>
+      </div>
+      <div class="log-box anim-item delay-8" id="log-box"></div>
+    </aside>
+  </section>
+
+  <!-- PAGE 5: CALCULATIONS SCREEN -->
+  <main class="screen content-screen" id="calc-screen">
+    <!-- Compact Top-Left Return Icon -->
+    <div class="top-bar-overlay left-overlay anim-item delay-1">
+      <button class="icon-btn" id="btn-close-calc">&larr; Return</button>
+    </div>
+
+    <div class="badge anim-item delay-1">Analysis</div>
+    <h1 class="hero-title anim-item delay-2">Bounce Calculations</h1>
+    <p class="hero-sub anim-item delay-3">Step-by-step mathematical derivation for the first four impacts.</p>
+    
+    <div class="theory-grid anim-item delay-5" style="grid-template-columns: minmax(0, 1fr);" id="calc-content-area"></div>
+  </main>
+
+  <script>
+    // PWA Setup & Install Logic
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(err => console.log('SW Registration Failed', err));
+      });
+    }
+
+    let deferredPrompt;
+    const installBtn = document.getElementById('btn-install');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBtn.classList.add('show');
+    });
+
+    installBtn.addEventListener('click', async () => {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') installBtn.classList.remove('show');
+        deferredPrompt = null;
+      }
+    });
+
+    // Universal Click Pulse Event via Event Delegation
+    document.body.addEventListener('click', (e) => {
+      const btn = e.target.closest('.btn-launch, .btn-outline, .action-btn, .icon-btn, .speed-btn, .mode-btn, .reset-btn, .step-btn, .global-install-btn');
+      if (btn) {
+        const animClass = btn.id === 'btn-speed-down' ? 'pulse-anim-reverse' : 'pulse-anim';
+        btn.classList.remove('pulse-anim', 'pulse-anim-reverse');
+        void btn.offsetWidth; // Trigger reflow to restart animation
+        btn.classList.add(animClass);
+        btn.addEventListener('animationend', () => btn.classList.remove(animClass), { once: true });
+      }
+    });
+
+    // Intersection Observer for scroll-reveal elements
+    const scrollObserver = new IntersectionObserver((entries, obs) => {
+      entries.forEach(entry => {
+        entry.target.classList.toggle('revealed', entry.isIntersecting);
+      });
+    }, { threshold: 0.15 });
+
+    document.querySelectorAll('.scroll-reveal').forEach(el => scrollObserver.observe(el));
+
+    // Global Theme Logic
+    const globalThemeBtn = document.getElementById("global-theme-toggle");
+    let isLight = false;
+    globalThemeBtn.addEventListener("click", () => {
+      isLight = !isLight;
+      document.body.classList.toggle("light-mode", isLight);
+      document.getElementById("icon-sun").style.display = isLight ? "none" : "block";
+      document.getElementById("icon-moon").style.display = isLight ? "block" : "none";
+      
+      globalThemeBtn.classList.remove('pulse-anim');
+      void globalThemeBtn.offsetWidth; 
+      globalThemeBtn.classList.add('pulse-anim');
+      globalThemeBtn.addEventListener('animationend', () => globalThemeBtn.classList.remove('pulse-anim'), { once: true });
+    });
+
+    // Sound Logic
+    const soundBtn = document.getElementById("btn-sound");
+    let isSoundOn = true;
+    soundBtn.addEventListener("click", () => {
+      isSoundOn = !isSoundOn; 
+      document.getElementById("text-sound").textContent = isSoundOn ? "Sound: ON" : "Sound: OFF";
+      document.getElementById("icon-sound-on").style.display = isSoundOn ? "block" : "none";
+      document.getElementById("icon-sound-off").style.display = isSoundOn ? "none" : "block";
+      soundBtn.classList.toggle("active-toggle", !isSoundOn);
+    });
+
+    // Speed Control Logic
+    const speedVals = [1, 2, 4, 6, 8, 10];
+    let speedIdx = 0;
+    let simSpeed = speedVals[speedIdx];
+    const txtSpeed = document.getElementById("txt-speed");
+
+    document.getElementById("btn-speed-up").addEventListener("click", () => {
+      if (speedIdx < speedVals.length - 1) speedIdx++;
+      simSpeed = speedVals[speedIdx]; txtSpeed.textContent = simSpeed + "x";
+    });
+    
+    document.getElementById("btn-speed-down").addEventListener("click", () => {
+      if (speedIdx > 0) speedIdx--;
+      simSpeed = speedVals[speedIdx]; txtSpeed.textContent = simSpeed + "x";
+    });
+
+    // Screen Management
+    const introScreen = document.getElementById("intro-screen"), 
+          startScreen = document.getElementById("start-screen"), 
+          procedureScreen = document.getElementById("procedure-screen"),
+          simScreen = document.getElementById("sim-screen"),
+          calcScreen = document.getElementById("calc-screen");
+          
+    let audioCtx = null;
+    let lastScreen = introScreen;
+    
+    function switchScreen(oldScreen, newScreen) {
+      if (oldScreen) oldScreen.classList.remove("active");
+      newScreen.classList.add("active");
+      
+      const animItems = newScreen.querySelectorAll('.anim-item');
+      animItems.forEach(el => { el.style.animation = 'none'; });
+      
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          animItems.forEach(el => { el.style.animation = ''; });
+        });
+      });
+
+      document.body.classList.toggle('sim-active', newScreen.id === 'sim-screen');
+    }
+
+    // Navigation Wiring
+    document.getElementById("btn-nav-theory").addEventListener("click", () => switchScreen(introScreen, startScreen));
+    document.getElementById("btn-nav-procedure").addEventListener("click", () => switchScreen(introScreen, procedureScreen));
+    document.getElementById("btn-theory-back").addEventListener("click", () => switchScreen(startScreen, introScreen));
+    document.getElementById("btn-procedure-back").addEventListener("click", () => switchScreen(procedureScreen, introScreen));
+
+    function launchSimulation(fromScreen) {
+      lastScreen = fromScreen;
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      switchScreen(fromScreen, simScreen);
+      resizeCanvas(); 
+      prepareSim();
+    }
+
+    document.getElementById("btn-intro-launch-sim").addEventListener("click", () => launchSimulation(introScreen));
+    document.getElementById("btn-launch-sim-theory").addEventListener("click", () => launchSimulation(startScreen));
+    document.getElementById("btn-launch-sim-proc").addEventListener("click", () => launchSimulation(procedureScreen));
+
+    document.getElementById("btn-return").addEventListener("click", () => {
+      switchScreen(simScreen, lastScreen);
+    });
+    
+    document.getElementById("btn-calc").addEventListener("click", () => {
+      switchScreen(simScreen, calcScreen);
+      generateCalculations();
+    });
+    
+    document.getElementById("btn-close-calc").addEventListener("click", () => {
+      switchScreen(calcScreen, simScreen);
+    });
+
+    const modeBtns = document.querySelectorAll(".mode-btn"), dualSection = document.getElementById("mode-dual");
+    let isDualMode = false;
+    modeBtns.forEach(btn => btn.addEventListener("click", (e) => {
+      modeBtns.forEach(b => b.classList.remove("active")); e.target.classList.add("active");
+      isDualMode = e.target.dataset.mode === "dual"; dualSection.classList.toggle("active", isDualMode); prepareSim();
+    }));
+
+    function playBounceSound(materialType, impactSpeed) {
+      if (!audioCtx || !isSoundOn) return;
+      const vol = Math.min(1, Math.max(0.01, impactSpeed / 14));
+      if (vol < 0.02) return; 
+      const t = audioCtx.currentTime;
+      const bufferSize = audioCtx.sampleRate * 0.1; const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+      const noise = audioCtx.createBufferSource(); noise.buffer = buffer;
+      const filter = audioCtx.createBiquadFilter(); filter.type = 'lowpass'; const noiseGain = audioCtx.createGain();
+      noise.connect(filter); filter.connect(noiseGain); noiseGain.connect(audioCtx.destination);
+      const osc = audioCtx.createOscillator(); const oscGain = audioCtx.createGain();
+      osc.connect(oscGain); oscGain.connect(audioCtx.destination);
+
+      if (materialType === 'steel') {
+        osc.type = 'sine'; osc.frequency.setValueAtTime(3200, t); filter.frequency.setValueAtTime(4500, t);
+        oscGain.gain.setValueAtTime(vol * 0.5, t); oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+        noiseGain.gain.setValueAtTime(vol * 0.8, t); noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.02);
+      } else if (materialType === 'wood') {
+        osc.type = 'triangle'; osc.frequency.setValueAtTime(110, t); filter.frequency.setValueAtTime(900, t);
+        oscGain.gain.setValueAtTime(vol * 0.8, t); oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.08);
+        noiseGain.gain.setValueAtTime(vol, t); noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.04);
+      } else if (materialType === 'clay') {
+        osc.type = 'sine'; osc.frequency.setValueAtTime(60, t); filter.frequency.setValueAtTime(300, t);
+        oscGain.gain.setValueAtTime(vol * 0.4, t); oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.03);
+        noiseGain.gain.setValueAtTime(vol * 1.5, t); noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.06);
+      } else {
+        osc.type = 'sine'; osc.frequency.setValueAtTime(550, t); osc.frequency.exponentialRampToValueAtTime(150, t + 0.1);
+        filter.frequency.setValueAtTime(1200, t);
+        oscGain.gain.setValueAtTime(vol * 0.9, t); oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.12);
+        noiseGain.gain.setValueAtTime(vol * 0.5, t); noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.03);
+      }
+      osc.start(t); osc.stop(t + 0.2); noise.start(t); noise.stop(t + 0.2);
+    }
+
+    const PRESETS = {
+      superball: { e: 0.88, type: 'rubber', radius: 0.45 },
+      tennis:    { e: 0.72, type: 'rubber', radius: 0.48 },
+      wood:      { e: 0.60, type: 'wood',   radius: 0.52 },
+      steel:     { e: 0.65, type: 'steel',  radius: 0.38 },
+      clay:      { e: 0.05, type: 'clay',   radius: 0.48 },
+      custom:    { e: 0.99, type: 'rubber', radius: 0.48 }
+    };
+
+    const canvas = document.getElementById("simCanvas"); const ctx = canvas.getContext("2d");
+    const selA = document.getElementById("preset-a"), selB = document.getElementById("preset-b");
+    const sldEA = document.getElementById("param-e-a"), sldEB = document.getElementById("param-e-b");
+    const txtEA = document.getElementById("txt-e-a"), txtEB = document.getElementById("txt-e-b");
+    const sldH = document.getElementById("param-h"), txtH = document.getElementById("txt-h");
+    const sldG = document.getElementById("param-g"), txtG = document.getElementById("txt-g");
+    const logBox = document.getElementById("log-box"), playPauseBtn = document.getElementById("btn-playpause");
+
+    function closeAllDropdowns() {
+      document.querySelectorAll('.custom-select-wrapper').forEach(w => w.classList.remove('open'));
+      document.querySelectorAll('.custom-select-options').forEach(o => o.classList.remove('open'));
+    }
+
+    function setupCustomDropdown(selectId, wrapperId, accentVar) {
+      const select = document.getElementById(selectId);
+      const wrapper = document.createElement('div');
+      wrapper.className = 'custom-select-wrapper';
+      wrapper.id = wrapperId;
+      wrapper.tabIndex = 0;
+
+      const trigger = document.createElement('div');
+      trigger.className = 'custom-select-trigger';
+      trigger.innerHTML = `<span>${select.options[select.selectedIndex].text}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(${accentVar})" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+
+      const optionsList = document.createElement('ul');
+      optionsList.className = 'custom-select-options';
+      optionsList.id = 'options-' + wrapperId;
+
+      Array.from(select.options).forEach(opt => {
+        const li = document.createElement('li');
+        li.className = 'custom-select-option';
+        li.textContent = opt.text;
+        li.dataset.value = opt.value;
+        li.addEventListener('click', (e) => {
+          e.stopPropagation();
+          trigger.querySelector('span').textContent = opt.text;
+          select.value = opt.value;
+          wrapper.classList.remove('open');
+          optionsList.classList.remove('open');
+          select.dispatchEvent(new Event('change'));
+        });
+        optionsList.appendChild(li);
+      });
+
+      trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = wrapper.classList.contains('open');
+        closeAllDropdowns();
+        
+        if (!isOpen) {
+          wrapper.classList.add('open');
+          const rect = trigger.getBoundingClientRect();
+          optionsList.style.top = (rect.bottom + 8) + 'px';
+          optionsList.style.left = rect.left + 'px';
+          optionsList.style.width = rect.width + 'px';
+          optionsList.classList.add('open');
+        }
+      });
+
+      wrapper.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          trigger.click();
+        } else if (e.key === 'Escape') {
+          wrapper.classList.remove('open');
+          optionsList.classList.remove('open');
+        }
+      });
+
+      wrapper.appendChild(trigger);
+      document.body.appendChild(optionsList); 
+      select.parentNode.insertBefore(wrapper, select.nextSibling);
+      
+      select.addEventListener('change', () => {
+        trigger.querySelector('span').textContent = select.options[select.selectedIndex].text;
+      });
+    }
+
+    setupCustomDropdown('preset-a', 'wrapper-preset-a', '--accent-a');
+    setupCustomDropdown('preset-b', 'wrapper-preset-b', '--accent-b');
+
+    document.addEventListener('click', closeAllDropdowns);
+    window.addEventListener('resize', closeAllDropdowns);
+    
+    const simPanelEl = document.getElementById('sim-panel');
+    if (simPanelEl) simPanelEl.addEventListener('scroll', closeAllDropdowns);
+
+    function bindStepButtons(decId, incId, inputId) {
+      const decBtn = document.getElementById(decId);
+      const incBtn = document.getElementById(incId);
+      const input = document.getElementById(inputId);
+      
+      const stepOp = (mult) => {
+        if(input.disabled) return;
+        const step = parseFloat(input.step) || 1;
+        const min = parseFloat(input.min);
+        const max = parseFloat(input.max);
+        let val = parseFloat(input.value) + (step * mult);
+        val = Math.max(min, Math.min(max, val));
+        
+        const decimals = step.toString().split('.')[1]?.length || 0;
+        input.value = val.toFixed(decimals);
+        input.dispatchEvent(new Event('input')); 
+      };
+
+      decBtn.addEventListener('click', () => stepOp(-1));
+      incBtn.addEventListener('click', () => stepOp(1));
+    }
+    
+    bindStepButtons('btn-dec-ea', 'btn-inc-ea', 'param-e-a');
+    bindStepButtons('btn-dec-eb', 'btn-inc-eb', 'param-e-b');
+    bindStepButtons('btn-dec-h', 'btn-inc-h', 'param-h');
+    bindStepButtons('btn-dec-g', 'btn-inc-g', 'param-g');
+
+    let groundY = 0, pixelsPerMeter = 45, lastTime = 0, visualMaxM = 11.0;
+    let ballA = null, ballB = null, syncLogs = [];
+    let isPaused = false, isDropped = false;
+
+    function updateMaterialState(sel, sld, txt) {
+      const parent = sld.parentElement;
+      if (sel.value === "custom") { 
+        sld.disabled = false; sld.style.pointerEvents = "auto"; parent.style.opacity = "1"; 
+      } else { 
+        sld.disabled = true; sld.style.pointerEvents = "none"; parent.style.opacity = "0.4"; sld.value = PRESETS[sel.value].e; 
+      }
+      txt.textContent = parseFloat(sld.value).toFixed(2);
+    }
+
+    selA.onchange = () => { updateMaterialState(selA, sldEA, txtEA); prepareSim(); };
+    selB.onchange = () => { updateMaterialState(selB, sldEB, txtEB); prepareSim(); };
+    sldEA.oninput = () => { txtEA.textContent = parseFloat(sldEA.value).toFixed(2); prepareSim(); };
+    sldEB.oninput = () => { txtEB.textContent = parseFloat(sldEB.value).toFixed(2); prepareSim(); };
+    sldH.oninput = () => { txtH.textContent = parseFloat(sldH.value).toFixed(1) + " m"; prepareSim(); };
+    sldG.oninput = () => { txtG.textContent = parseFloat(sldG.value).toFixed(2) + " m/s²"; prepareSim(); };
+    document.getElementById("btn-reset-g").addEventListener("click", () => { sldG.value = 9.81; txtG.textContent = "9.81 m/s²"; prepareSim(); });
+    
+    updateMaterialState(selA, sldEA, txtEA); updateMaterialState(selB, sldEB, txtEB);
+
+    function resizeCanvas() {
+      const rectC = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rectC.width * (window.devicePixelRatio || 1); canvas.height = rectC.height * (window.devicePixelRatio || 1);
+      ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+      groundY = rectC.height - 40;
+    }
+    window.addEventListener("resize", () => { if(simScreen.classList.contains("active")) { resizeCanvas(); prepareSim(); } });
+    
+    document.getElementById("btn-drop").onclick = () => {
+      if (!isDropped || (ballA && ballA.settled)) { prepareSim(); }
+      isDropped = true; isPaused = false; 
+      document.getElementById("text-playpause").textContent = "Pause";
+      document.getElementById("icon-pause").style.display = "block";
+      document.getElementById("icon-play").style.display = "none";
+      playPauseBtn.classList.remove("paused");
+    };
+    
+    playPauseBtn.onclick = () => {
+      if (!isDropped) return;
+      isPaused = !isPaused; 
+      document.getElementById("text-playpause").textContent = isPaused ? "Resume" : "Pause";
+      document.getElementById("icon-pause").style.display = isPaused ? "none" : "block";
+      document.getElementById("icon-play").style.display = isPaused ? "block" : "none";
+      playPauseBtn.classList.toggle("paused", isPaused);
+    };
+
+    function createBall(isB, eVal, presetKey, startX) {
+      const p = PRESETS[presetKey] || PRESETS['custom'];
+      return { x: startX, yM: parseFloat(sldH.value) + p.radius, vy: 0, rM: p.radius, e: parseFloat(eVal), type: p.type, 
+               isB: isB, bounces: 0, settled: false, apexLogged: false, initialH: parseFloat(sldH.value) };
+    }
+
+    function prepareSim() {
+      syncLogs = []; isDropped = false; isPaused = false; 
+      document.getElementById("text-playpause").textContent = "Pause";
+      document.getElementById("icon-pause").style.display = "block";
+      document.getElementById("icon-play").style.display = "none";
+      playPauseBtn.classList.remove("paused");
+      
+      const h0 = parseFloat(sldH.value);
+      visualMaxM = Math.max(11.0, h0 * 1.15);
+      pixelsPerMeter = (groundY - 40) / visualMaxM;
+
+      const cw = canvas.parentElement.clientWidth;
+      if (isDualMode) {
+        ballA = createBall(false, sldEA.value, selA.value, cw * 0.35); ballB = createBall(true, sldEB.value, selB.value, cw * 0.65);
+      } else { ballA = createBall(false, sldEA.value, selA.value, cw * 0.5); ballB = null; }
+      renderLogs();
+    }
+
+    function renderLogs() {
+      let html = '';
+      if(isDualMode) {
+        html += `<div class="log-header-dual"><span>Bounce</span><span>Ball</span><span>Height Retained</span><span>Energy Retained</span></div>`;
+        syncLogs.forEach((log, i) => {
+          if (log.a) {
+            let hA = log.a === "Settled" ? '<span style="color:var(--success)">Settled</span>' : `${log.a.h}`;
+            let eA = log.a === "Settled" ? '-' : (i < 4 ? `<span style="background:var(--card-border); padding:2px 6px; border-radius:6px; color:var(--accent-a);">${log.a.e}</span>` : `<span>${log.a.e}</span>`);
+            html += `<div class="log-row-dual"><span>#${i+1}</span><span style="color:var(--accent-a)">Ball A</span><span>${hA}</span><span>${eA}</span></div>`;
+          }
+          if (log.b) {
+            let hB = log.b === "Settled" ? '<span style="color:var(--success)">Settled</span>' : `${log.b.h}`;
+            let eB = log.b === "Settled" ? '-' : (i < 4 ? `<span style="background:var(--card-border); padding:2px 6px; border-radius:6px; color:var(--accent-b);">${log.b.e}</span>` : `<span>${log.b.e}</span>`);
+            html += `<div class="log-row-dual"><span style="opacity:0">#${i+1}</span><span style="color:var(--accent-b)">Ball B</span><span>${hB}</span><span>${eB}</span></div>`;
+          }
+        });
+      } else {
+        html += `<div class="log-header-single"><span>Bounce</span><span>Height Retained</span><span>Energy Retained</span></div>`;
+        syncLogs.forEach((log, i) => {
+          if (log.a) {
+            let hA = log.a === "Settled" ? '<span style="color:var(--success)">Settled</span>' : `${log.a.h}`;
+            let eA = log.a === "Settled" ? '-' : (i < 4 ? `<span style="background:var(--card-border); padding:2px 6px; border-radius:6px; color:var(--accent-a);">${log.a.e}</span>` : `<span>${log.a.e}</span>`);
+            html += `<div class="log-row-single"><span>#${i+1}</span><span>${hA}</span><span>${eA}</span></div>`;
+          }
+        });
+      }
+      logBox.innerHTML = html; logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function processPhysics(ball, dt, isB) {
+      if (ball.settled) return;
+      const g = parseFloat(sldG.value);
+      const prevY = ball.yM;
+      const prevVy = ball.vy;
+
+      ball.yM = prevY + prevVy * dt - 0.5 * g * (dt * dt);
+      ball.vy = prevVy - g * dt;
+
+      if (ball.yM <= ball.rM) {
+        const impactSq = prevVy * prevVy + 2 * g * (prevY - ball.rM);
+        const impact = Math.sqrt(Math.max(0, impactSq));
+        
+        playBounceSound(ball.type, impact); 
+        ball.vy = impact * ball.e; 
+        ball.yM = ball.rM;
+        ball.bounces++; 
+        ball.apexLogged = false;
+        
+        if (impact < 0.2) {
+          ball.vy = 0; ball.yM = ball.rM; ball.settled = true;
+          if(!syncLogs[ball.bounces-1]) syncLogs[ball.bounces-1] = { a: null, b: null };
+          if(!isB) syncLogs[ball.bounces-1].a = "Settled"; else syncLogs[ball.bounces-1].b = "Settled";
+          renderLogs();
+        }
+      } 
+      else if (ball.bounces > 0 && !ball.apexLogged && !ball.settled) {
+        if (ball.vy <= 0 && prevVy > 0) {
+          const t_apex = prevVy / g;
+          const exact_y = prevY + prevVy * t_apex - 0.5 * g * (t_apex * t_apex);
+          const maxM = Math.max(0, exact_y - ball.rM);
+          
+          if(!syncLogs[ball.bounces-1]) syncLogs[ball.bounces-1] = { a: null, b: null };
+          const p = ((maxM / ball.initialH) * 100).toFixed(1);
+          const logData = { h: maxM.toFixed(2) + " m", e: p + "%" };
+          
+          if(!isB) syncLogs[ball.bounces-1].a = logData; else syncLogs[ball.bounces-1].b = logData;
+          renderLogs(); ball.apexLogged = true;
+        }
+      }
+    }
+
+    function getCssColor(varName) { return getComputedStyle(document.documentElement).getPropertyValue(varName).trim(); }
+
+    function drawBall(ball) {
+      const baseRPx = ball.rM * pixelsPerMeter;
+      const visualRPx = Math.max(baseRPx, 8);
+      const yPx = groundY - (ball.yM * pixelsPerMeter) - (visualRPx - baseRPx); 
+      const accentHex = getCssColor(ball.isB ? '--accent-b' : '--accent-a');
+      
+      ctx.strokeStyle = isLight ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)";
+      ctx.beginPath(); ctx.moveTo(ball.x, yPx); ctx.lineTo(ball.x, groundY); ctx.stroke();
+      
+      ctx.fillStyle = isLight ? "rgba(0,0,0,0.1)" : "rgba(0,0,0,0.4)";
+      ctx.beginPath(); ctx.ellipse(ball.x, groundY, visualRPx * 1.2, 4, 0, 0, Math.PI*2); ctx.fill();
+      
+      ctx.save(); ctx.translate(ball.x, yPx);
+      const grad = ctx.createRadialGradient(-visualRPx * 0.3, -visualRPx * 0.3, visualRPx * 0.1, 0, 0, visualRPx);
+      grad.addColorStop(0, "#ffffff"); grad.addColorStop(0.4, accentHex); grad.addColorStop(1, isLight ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.9)");
+      ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, visualRPx, 0, Math.PI*2); ctx.fill(); ctx.restore();
+      
+      ctx.fillStyle = isLight ? "#000" : "#fff"; ctx.font = "bold 13px sans-serif";
+      ctx.fillText((ball.yM - ball.rM).toFixed(2) + "m", ball.x + visualRPx + 10, yPx + 4);
+    }
+
+    function loop(timestamp) {
+      if (!lastTime) lastTime = timestamp; 
+      const dt = Math.min((timestamp - lastTime) / 1000, 0.035); 
+      lastTime = timestamp;
+      if (simScreen.classList.contains("active") && ballA) {
+        const w = canvas.parentElement.clientWidth, h = canvas.parentElement.clientHeight;
+        ctx.clearRect(0, 0, w, h);
+        
+        ctx.strokeStyle = isLight ? "rgba(15, 23, 42, 0.2)" : "rgba(255, 255, 255, 0.08)";
+        ctx.fillStyle = isLight ? "rgba(15, 23, 42, 0.6)" : "rgba(255, 255, 255, 0.45)";
+        ctx.font = "10px monospace"; ctx.lineWidth = 1;
+        let stepM = visualMaxM > 50 ? 10 : visualMaxM > 20 ? 5 : visualMaxM > 10 ? 2 : 1;
+        for (let m = 0; m <= visualMaxM; m += stepM) {
+          const yPx = groundY - m * pixelsPerMeter;
+          if (yPx < 75) break; 
+          ctx.beginPath(); ctx.moveTo(42, yPx); ctx.lineTo(42 + 10, yPx); ctx.stroke();
+          ctx.fillText(`${m}m`, 16, yPx + 4);
+        }
+
+        ctx.strokeStyle = isLight ? "rgba(15, 23, 42, 0.2)" : "rgba(255,255,255,0.15)";
+        ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(10, groundY); ctx.lineTo(w-10, groundY); ctx.stroke();
+
+        if (isDropped && !isPaused) {
+          const baseSteps = 5;
+          const totalSteps = baseSteps * simSpeed;
+          for(let step=0; step<totalSteps; step++) { 
+            processPhysics(ballA, dt/baseSteps, false); 
+            if (ballB) processPhysics(ballB, dt/baseSteps, true); 
+          }
+        }
+        drawBall(ballA); if(ballB) drawBall(ballB);
+      }
+      requestAnimationFrame(loop);
+    }
+    resizeCanvas(); prepareSim(); requestAnimationFrame(loop);
+
+    const getSub = (n) => ['₀','₁','₂','₃','₄','₅','₆','₇','₈','₉'][n] || n;
+    const getSup = (n) => {
+      const map = {'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+      return String(n).split('').map(c => map[c] || c).join('');
+    };
+
+    function generateCalculations() {
+      const h0 = parseFloat(sldH.value);
+      const g = parseFloat(sldG.value);
+      
+      let html = '';
+      
+      function buildCalc(balls, eVal, ballName, accentVar) {
+        const v0 = Math.sqrt(2 * g * h0);
+        
+        let resHTML = `<div class="theory-card" style="border-left: 4px solid var(${accentVar}); margin-bottom:var(--space-md);">
+          <h3 style="color:var(${accentVar})">${ballName} (<span class="math-e">e</span> = ${parseFloat(eVal).toFixed(2)})</h3>
+          <p><strong>Given:</strong> Drop Height (h₀) = ${h0.toFixed(2)} m, Gravity (g) = ${g.toFixed(2)} m/s², Restitution (<span class="math-e">e</span>) = ${parseFloat(eVal).toFixed(2)}</p>
+          
+          <div class="formula-callout" style="margin-top:var(--space-md);">
+            <div style="font-weight:600; color:var(--text-main); margin-bottom:8px; border-bottom:1px solid var(--card-border); padding-bottom:4px;">Initial Impact Velocity (v₀)</div>
+            <div><strong>Formula:</strong> v₀ = √(2 · g · h₀)</div>
+            <div><strong>Substitution:</strong> v₀ = √(2 · ${g.toFixed(2)} · ${h0.toFixed(2)})</div>
+            <div style="color:var(--accent-a); font-weight:700;"><strong>Result:</strong> v₀ = ${v0.toFixed(2)} m/s</div>
+          </div>
+          
+          <div style="margin-top:var(--space-md); display:flex; flex-direction:column; gap:var(--space-md);">`;
+        
+        for (let n = 1; n <= 4; n++) {
+          const ePow = n;
+          const ePow2 = 2 * n;
+          const vn = v0 * Math.pow(eVal, ePow);
+          const calcH = h0 * Math.pow(eVal, ePow2);
+          let measuredH = (balls[n-1] && balls[n-1] !== "Settled") ? balls[n-1].h : "N/A";
+          
+          resHTML += `<div class="formula-callout" style="margin: 0; line-height:1.8;">
+            <div style="font-weight:600; color:var(--text-main); margin-bottom:8px; border-bottom:1px solid var(--card-border); padding-bottom:4px;">Bounce ${n}</div>
+            
+            <div><strong>Step 1: Rebound Velocity</strong></div>
+            <div style="padding-left:12px;">Formula: v${getSub(n)} = <span class="math-e">e</span>${getSup(n)} · v₀</div>
+            <div style="padding-left:12px;">Substitution: v${getSub(n)} = ${eVal}${getSup(n)} · ${v0.toFixed(2)}</div>
+            <div style="padding-left:12px;">Result: v${getSub(n)} = ${vn.toFixed(2)} m/s</div>
+            
+            <div style="margin-top:12px;"><strong>Step 2: Rebound Height</strong></div>
+            <div style="padding-left:12px;">Formula: h${getSub(n)} = h₀ · <span class="math-e">e</span>${getSup(ePow2)}</div>
+            <div style="padding-left:12px;">Substitution: h${getSub(n)} = ${h0.toFixed(2)} · ${eVal}${getSup(ePow2)}</div>
+            <div style="padding-left:12px; color:var(--accent-a); font-weight:700;">Calculated h${getSub(n)} = ${calcH.toFixed(2)} m</div>
+            <div style="padding-left:12px; color:var(--accent-b); font-weight:700;">Observed h${getSub(n)} = ${measuredH}</div>
+          </div>`;
+        }
+        resHTML += `</div></div>`;
+        return resHTML;
+      }
+
+      if (isDualMode) {
+        html += buildCalc(syncLogs.map(l=>l.a), sldEA.value, "Ball A", "--accent-a");
+        html += buildCalc(syncLogs.map(l=>l.b), sldEB.value, "Ball B", "--accent-b");
+      } else {
+        html += buildCalc(syncLogs.map(l=>l.a), sldEA.value, "Primary Ball", "--accent-a");
+      }
+      document.getElementById('calc-content-area').innerHTML = html;
+    }
+
+    document.getElementById("btn-pdf").addEventListener("click", () => {
+      if (!window.jspdf) { alert("PDF library is loading. Please try again."); return; }
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      let y = 20;
+
+      function addFooter(docObj) {
+        const pageCount = docObj.internal.getNumberOfPages();
+        docObj.setFontSize(9);
+        docObj.setTextColor(150, 150, 150);
+        docObj.text(`Generated by Impact Dynamics Lab - Page ${pageCount}`, 105, 290, { align: 'center' });
+        docObj.setTextColor(0, 0, 0);
+      }
+
+      doc.setFontSize(22);
+      doc.setFont(undefined, 'bold');
+      doc.text("Impact Dynamics Laboratory Log", 20, y);
+      y += 8;
+      doc.setFontSize(11);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, 20, y);
+      y += 5;
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.5);
+      doc.line(20, y, 190, y);
+      y += 12;
+      doc.setTextColor(0, 0, 0);
+
+      function drawSectionHeader(title, currentY) {
+        if (currentY > 260) { doc.addPage(); addFooter(doc); currentY = 20; }
+        doc.setFillColor(240, 245, 250);
+        doc.rect(20, currentY - 6, 170, 10, 'F');
+        doc.setFontSize(12);
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(20, 40, 70);
+        doc.text(title, 22, currentY + 1);
+        doc.setTextColor(0, 0, 0);
+        return currentY + 12;
+      }
+
+      y = drawSectionHeader("1. Apex Log Data", y);
+      doc.setFontSize(10);
+      
+      if (syncLogs.length === 0) {
+        doc.text("No log data available. Run the simulation first.", 20, y);
+        y += 10;
+      } else {
+        doc.setFont(undefined, 'bold');
+        if (isDualMode) {
+          doc.text("Bounce #", 20, y); 
+          doc.text("Ball A Height", 45, y); doc.text("Ball A Energy", 80, y); 
+          doc.text("Ball B Height", 120, y); doc.text("Ball B Energy", 155, y);
+          y += 6;
+          doc.line(20, y-4, 190, y-4);
+          doc.setFont(undefined, 'normal');
+          
+          syncLogs.forEach((log, i) => {
+             if (y > 275) { doc.addPage(); addFooter(doc); y = 20; }
+             doc.text(`#${i+1}`, 20, y);
+             doc.text(log.a === "Settled" ? "Settled" : (log.a ? log.a.h : "N/A"), 45, y);
+             doc.text(log.a === "Settled" ? "-" : (log.a ? log.a.e : "N/A"), 80, y);
+             doc.text(log.b === "Settled" ? "Settled" : (log.b ? log.b.h : "N/A"), 120, y);
+             doc.text(log.b === "Settled" ? "-" : (log.b ? log.b.e : "N/A"), 155, y);
+             y += 6;
+             doc.setDrawColor(240, 240, 240);
+             doc.line(20, y-4, 190, y-4);
+          });
+        } else {
+          doc.text("Bounce #", 20, y); doc.text("Height Retained", 60, y); doc.text("Energy Retained", 110, y);
+          y += 6;
+          doc.line(20, y-4, 190, y-4);
+          doc.setFont(undefined, 'normal');
+          
+          syncLogs.forEach((log, i) => {
+             if (y > 275) { doc.addPage(); addFooter(doc); y = 20; }
+             doc.text(`#${i+1}`, 20, y);
+             doc.text(log.a === "Settled" ? "Settled" : (log.a ? log.a.h : "N/A"), 60, y);
+             doc.text(log.a === "Settled" ? "-" : (log.a ? log.a.e : "N/A"), 110, y);
+             y += 6;
+             doc.setDrawColor(240, 240, 240);
+             doc.line(20, y-4, 190, y-4);
+          });
+        }
+        y += 8;
+      }
+      
+      if (y > 240) { doc.addPage(); addFooter(doc); y = 20; }
+      
+      y = drawSectionHeader("2. Bounce Calculations (First 4 Impacts)", y);
+      
+      const h0 = parseFloat(sldH.value);
+      const g = parseFloat(sldG.value);
+      
+      function writePDFCalc(balls, eVal, ballName, rgbColor) {
+        const v0 = Math.sqrt(2 * g * h0);
+        
+        if (y > 250) { doc.addPage(); addFooter(doc); y = 20; }
+        
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(...rgbColor);
+        doc.text(`${ballName} (e = ${parseFloat(eVal).toFixed(2)})`, 20, y);
+        
+        doc.setDrawColor(...rgbColor);
+        doc.setLineWidth(0.6);
+        doc.line(20, y+2, 80, y+2);
+        
+        doc.setTextColor(0, 0, 0);
+        y += 8;
+        
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'bold');
+        doc.text(`Given:`, 20, y); y += 6;
+        doc.setFont(undefined, 'normal');
+        doc.text(`Drop Height (h0) = ${h0.toFixed(2)} m, Gravity (g) = ${g.toFixed(2)} m/s², Restitution (e) = ${parseFloat(eVal).toFixed(2)}`, 25, y);
+        y += 10;
+        
+        if (y > 250) { doc.addPage(); addFooter(doc); y = 20; }
+        
+        doc.setFont(undefined, 'bold');
+        doc.text(`Initial Impact Velocity (v0):`, 20, y); y += 6;
+        doc.setFont(undefined, 'normal');
+        doc.text(`Formula: v0 = √(2 · g · h0)`, 25, y); y += 5.5;
+        doc.text(`Substitution: v0 = √(2 · ${g.toFixed(2)} · ${h0.toFixed(2)})`, 25, y); y += 5.5;
+        doc.setFont(undefined, 'bold');
+        doc.text(`Result: v0 = ${v0.toFixed(2)} m/s`, 25, y); y += 12;
+        
+        for (let n = 1; n <= 4; n++) {
+          if (y > 220) { doc.addPage(); addFooter(doc); y = 20; }
+          const ePow = n;
+          const ePow2 = 2 * n;
+          const vn = v0 * Math.pow(eVal, ePow);
+          const calcH = h0 * Math.pow(eVal, ePow2);
+          let measuredH = (balls[n-1] && balls[n-1] !== "Settled") ? balls[n-1].h : "N/A";
+          
+          doc.setFont(undefined, 'bold');
+          doc.text(`Bounce ${n}:`, 20, y); y += 6;
+          
+          const ePowStr = getSup(ePow);
+          const ePow2Str = getSup(ePow2);
+          
+          doc.text(`Step 1: Rebound Velocity`, 25, y); y += 5.5;
+          doc.setFont(undefined, 'normal');
+          doc.text(`Formula: v${n} = e${ePowStr} · v0`, 30, y); y += 5.5;
+          doc.text(`Substitution: v${n} = ${eVal}${ePowStr} · ${v0.toFixed(2)}`, 30, y); y += 5.5;
+          doc.text(`Result: v${n} = ${vn.toFixed(2)} m/s`, 30, y); y += 7;
+          
+          doc.setFont(undefined, 'bold');
+          doc.text(`Step 2: Rebound Height`, 25, y); y += 5.5;
+          doc.setFont(undefined, 'normal');
+          doc.text(`Formula: h${n} = h0 · e${ePow2Str}`, 30, y); y += 5.5;
+          doc.text(`Substitution: h${n} = ${h0.toFixed(2)} · ${eVal}${ePow2Str}`, 30, y); y += 5.5;          
+          doc.setFont(undefined, 'bold');
+          doc.text(`Calculated h${n} = ${calcH.toFixed(2)} m`, 30, y); y += 5.5;
+          doc.text(`Observed h${n} = ${measuredH}`, 30, y); y += 10;
+          doc.setFont(undefined, 'normal');
+        }
+      }
+
+      if (isDualMode) {
+        writePDFCalc(syncLogs.map(l=>l.a), sldEA.value, "Ball A", [14, 165, 233]);
+        y += 5;
+        writePDFCalc(syncLogs.map(l=>l.b), sldEB.value, "Ball B", [249, 115, 22]);
+      } else {
+        writePDFCalc(syncLogs.map(l=>l.a), sldEA.value, "Primary Ball", [14, 165, 233]);
+      }
+      
+      addFooter(doc);
+      doc.save("Impact_Dynamics_Lab_Log.pdf");
+    });
+  </script>
+</body>
+</html>
