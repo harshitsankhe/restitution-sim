@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#161b22"/>
+      <stop offset="1" stop-color="#0a0c10"/>
+    </linearGradient>
+    <radialGradient id="ball" cx="0.35" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.4" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#0369a1"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#38bdf8" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background tile -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="4"/>
+
+  <!-- Faint lab grid -->
+  <g stroke="#38bdf8" stroke-opacity="0.07" stroke-width="2">
+    <path d="M128 0 V512 M256 0 V512 M384 0 V512"/>
+    <path d="M0 128 H512 M0 256 H512 M0 384 H512"/>
+  </g>
+
+  <!-- Dotted trajectory arc showing the bounce path -->
+  <path d="M120 360 Q150 120 256 150 Q362 180 392 360" fill="none" stroke="#fb923c" stroke-opacity="0.7" stroke-width="8" stroke-linecap="round" stroke-dasharray="2 22"/>
+
+  <!-- Glow behind the ball -->
+  <circle cx="256" cy="150" r="130" fill="url(#glow)"/>
+
+  <!-- Ball -->
+  <circle cx="256" cy="150" r="58" fill="url(#ball)"/>
+
+  <!-- Contact shadow -->
+  <ellipse cx="256" cy="392" rx="96" ry="14" fill="#000000" fill-opacity="0.45"/>
+
+  <!-- Ground line -->
+  <rect x="112" y="388" width="288" height="16" rx="8" fill="#fb923c"/>
+</svg>
