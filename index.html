@@ -28,6 +28,17 @@
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" id="MathJax-script" async></script>
   <!-- Load jsPDF from CDN for local PDF generation -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <!-- Three.js & Cannon-es Import Map -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+        "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm"
+      }
+    }
+  </script>
   
   <style>
     :root {
@@ -404,10 +415,37 @@
       #sim-screen { flex-direction: column; } 
     }
     
-    #canvas-container { flex: 1; position: relative; overflow: hidden; background: transparent; }
-    #simCanvas { display: block; width: 100%; height: 100%; }
+    #canvas-container { flex: 1; position: relative; overflow: hidden; background: transparent; touch-action: none; }
+    #simCanvas { display: block; width: 100%; height: 100%; cursor: grab; outline: none; }
+    #simCanvas:active { cursor: grabbing; }
 
-    .top-bar-overlay { position: absolute; top: var(--space-md); display: flex; gap: 12px; z-index: 20; transition: top var(--transition-slow); }
+    /* 3D Projected Live Telemetry HUD */
+    #hud-overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 15; }
+    .hud-tag {
+      position: absolute; top: 0; left: 0;
+      display: none; flex-direction: column; gap: 2px;
+      padding: 5px 9px; border-radius: var(--radius-sm);
+      background: var(--code-bg); border: 1px solid var(--card-border);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      font-family: var(--font-mono); font-size: 0.74rem; line-height: 1.25;
+      color: var(--text-main); box-shadow: var(--shadow-soft);
+      white-space: nowrap; will-change: transform, opacity;
+      transition: opacity 0.15s ease;
+    }
+    .hud-tag-a { border-left: 3px solid var(--accent-a); }
+    .hud-tag-b { border-left: 3px solid var(--accent-b); }
+    .hud-tag-h { font-weight: 700; font-size: 0.8rem; }
+    .hud-tag-v { font-size: 0.68rem; color: var(--text-sub); }
+
+    .viewport-hint {
+      position: absolute; bottom: 12px; left: 14px; z-index: 16; pointer-events: none;
+      font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-sub);
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      padding: 4px 10px; border-radius: var(--radius-sm); backdrop-filter: blur(8px);
+      opacity: 0.78;
+    }
+
+    .top-bar-overlay { position: absolute; top: var(--space-md); display: flex; gap: 10px; z-index: 20; transition: top var(--transition-slow); }
     .left-overlay { left: var(--space-md); }
     .right-overlay { right: 70px; }
     
@@ -421,11 +459,13 @@
     @media (max-width: 900px) { 
       #sim-panel { width: 100%; height: 60%; border-left: none; border-top: 1px solid var(--card-border); border-radius: var(--radius-xl) var(--radius-xl) 0 0; padding: var(--space-lg) var(--space-md); } 
       
-      .top-bar-overlay { top: 8px; }
+      .top-bar-overlay { top: 8px; gap: 6px; }
       .left-overlay { left: 8px; }
       .right-overlay { right: 50px; }
-      .icon-btn { padding: 8px 12px; font-size: 0.8rem; }
+      .icon-btn { padding: 8px 10px; font-size: 0.8rem; }
       .icon-btn svg { width: 14px; height: 14px; }
+      .cam-reset-label { display: none; }
+      .viewport-hint { bottom: 6px; left: 8px; font-size: 0.62rem; padding: 3px 7px; }
       
       body.sim-active .global-theme-btn { 
         top: 8px; right: 8px; width: 32px; height: 32px; font-size: 0.8rem; 
@@ -509,7 +549,7 @@
       body.light-mode { background: linear-gradient(-45deg, #f8fafc, #cbd5e1, #e2e8f0, #f8fafc) !important; }
       .theme-bg-overlay { display: none; }
       .blur-orb { filter: blur(40px) !important; animation: none !important; }
-      .theory-card, #sim-panel, .global-theme-btn, .global-install-btn, .icon-btn, .contributors-section, .log-box {
+      .theory-card, #sim-panel, .global-theme-btn, .global-install-btn, .icon-btn, .contributors-section, .log-box, .hud-tag, .viewport-hint {
         backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
         background-color: var(--card-bg) !important;
       }
@@ -525,7 +565,7 @@
       .screen.active .anim-item { animation: none !important; opacity: 1 !important; }
       .hero-title { animation: none !important; -webkit-text-fill-color: var(--text-main) !important; background: none !important; }
     }
-      /* ==========================================================
+    /* ==========================================================
        PAGE TRANSITION (imported from uibounce-scroll-fixed.html)
        Pages materialise in from below with a soft blur, and each
        element blooms in after it, staggered. Presentation only.
@@ -844,6 +884,10 @@
         <button class="icon-btn" id="btn-return">&larr; Return</button>
       </div>
       <div class="top-bar-overlay right-overlay">
+        <button class="icon-btn" id="btn-reset-cam" title="Reset 3D Camera View">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+          <span class="cam-reset-label">Reset View</span>
+        </button>
         <button class="icon-btn" id="btn-sound">
           <svg id="icon-sound-on" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
           <svg id="icon-sound-off" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
@@ -851,6 +895,17 @@
         </button>
       </div>
       <canvas id="simCanvas"></canvas>
+      <div id="hud-overlay">
+        <div id="hud-a" class="hud-tag hud-tag-a">
+          <span class="hud-tag-h" id="hud-a-h">6.00 m</span>
+          <span class="hud-tag-v" id="hud-a-v">0.00 m/s</span>
+        </div>
+        <div id="hud-b" class="hud-tag hud-tag-b">
+          <span class="hud-tag-h" id="hud-b-h">6.00 m</span>
+          <span class="hud-tag-v" id="hud-b-v">0.00 m/s</span>
+        </div>
+      </div>
+      <div class="viewport-hint">Drag to orbit · Scroll to zoom</div>
     </div>
 
     <!-- UI Panel -->
@@ -964,7 +1019,12 @@
     <div class="theory-grid anim-item delay-5" style="grid-template-columns: minmax(0, 1fr);" id="calc-content-area"></div>
   </main>
 
-  <script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+    import * as CANNON from 'cannon-es';
+
     // PWA Setup & Install Logic
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -996,14 +1056,14 @@
       if (btn) {
         const animClass = btn.id === 'btn-speed-down' ? 'pulse-anim-reverse' : 'pulse-anim';
         btn.classList.remove('pulse-anim', 'pulse-anim-reverse');
-        void btn.offsetWidth; // Trigger reflow to restart animation
+        void btn.offsetWidth;
         btn.classList.add(animClass);
         btn.addEventListener('animationend', () => btn.classList.remove(animClass), { once: true });
       }
     });
 
     // Intersection Observer for scroll-reveal elements
-    const scrollObserver = new IntersectionObserver((entries, obs) => {
+    const scrollObserver = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         entry.target.classList.toggle('revealed', entry.isIntersecting);
       });
@@ -1024,6 +1084,8 @@
       void globalThemeBtn.offsetWidth; 
       globalThemeBtn.classList.add('pulse-anim');
       globalThemeBtn.addEventListener('animationend', () => globalThemeBtn.classList.remove('pulse-anim'), { once: true });
+
+      applyThreeTheme();
     });
 
     // Sound Logic
@@ -1064,8 +1126,6 @@
     let lastScreen = introScreen;
     
     function switchScreen(oldScreen, newScreen) {
-      // Guard: strip any lingering exit class from the incoming screen
-      // (handles rapid back-and-forth clicks where a previous exit hasn't cleaned up yet)
       newScreen.classList.remove('screen-exiting');
 
       if (oldScreen && oldScreen !== newScreen) {
@@ -1074,24 +1134,19 @@
 
         let exitCleaned = false;
         const cleanupExit = (e) => {
-          // Ignore bubbled animation events from child cards/buttons.
-          if (e && (e.target !== oldScreen || e.animationName !== 'screenExit')) return;
+          if (e && (e.target !== oldScreen || (e.animationName !== 'screenExit' && e.animationName !== 'pageDissolve'))) return;
           if (exitCleaned) return;
           exitCleaned = true;
           oldScreen.removeEventListener('animationend', cleanupExit);
           oldScreen.classList.remove('screen-exiting');
         };
 
-        // Do not use { once: true }: child animations can finish before screenExit.
         oldScreen.addEventListener('animationend', cleanupExit);
-        // Safety fallback in case the browser suppresses animationend.
         setTimeout(() => cleanupExit(), 700);
       }
 
       newScreen.classList.add('active');
 
-      // Restart staggered entrance animations (the double-rAF is the established fix
-      // that prevents the missing-button bug from earlier sessions — do NOT simplify)
       const animItems = newScreen.querySelectorAll('.anim-item');
       animItems.forEach(el => { el.style.animation = 'none'; });
       requestAnimationFrame(() => {
@@ -1112,9 +1167,14 @@
     function launchSimulation(fromScreen) {
       lastScreen = fromScreen;
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
       switchScreen(fromScreen, simScreen);
-      resizeCanvas(); 
-      prepareSim();
+      resizeCanvas();
+      prepareSim(true);
+      requestAnimationFrame(() => {
+        resizeCanvas();
+        frameCamera(true);
+      });
     }
 
     document.getElementById("btn-intro-launch-sim").addEventListener("click", () => launchSimulation(introScreen));
@@ -1132,21 +1192,25 @@
     
     document.getElementById("btn-close-calc").addEventListener("click", () => {
       switchScreen(calcScreen, simScreen);
+      requestAnimationFrame(() => resizeCanvas());
     });
 
     const modeBtns = document.querySelectorAll(".mode-btn"), dualSection = document.getElementById("mode-dual");
     let isDualMode = false;
     modeBtns.forEach(btn => btn.addEventListener("click", (e) => {
       modeBtns.forEach(b => b.classList.remove("active")); e.target.classList.add("active");
-      isDualMode = e.target.dataset.mode === "dual"; dualSection.classList.toggle("active", isDualMode); prepareSim();
+      isDualMode = e.target.dataset.mode === "dual"; dualSection.classList.toggle("active", isDualMode);
+      prepareSim(false);
     }));
 
     function playBounceSound(materialType, impactSpeed) {
       if (!audioCtx || !isSoundOn) return;
+      if (audioCtx.state === 'suspended') audioCtx.resume();
       const vol = Math.min(1, Math.max(0.01, impactSpeed / 14));
       if (vol < 0.02) return; 
       const t = audioCtx.currentTime;
-      const bufferSize = audioCtx.sampleRate * 0.1; const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const bufferSize = Math.floor(audioCtx.sampleRate * 0.1);
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
       const data = buffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
       const noise = audioCtx.createBufferSource(); noise.buffer = buffer;
       const filter = audioCtx.createBiquadFilter(); filter.type = 'lowpass'; const noiseGain = audioCtx.createGain();
@@ -1176,21 +1240,24 @@
     }
 
     const PRESETS = {
-      superball: { e: 0.88, type: 'rubber', radius: 0.45 },
-      tennis:    { e: 0.72, type: 'rubber', radius: 0.48 },
-      wood:      { e: 0.60, type: 'wood',   radius: 0.52 },
-      steel:     { e: 0.65, type: 'steel',  radius: 0.38 },
-      clay:      { e: 0.05, type: 'clay',   radius: 0.48 },
-      custom:    { e: 0.99, type: 'rubber', radius: 0.48 }
+      superball: { e: 0.88, type: 'rubber', radius: 0.45, mass: 0.15, squash: 0.24 },
+      tennis:    { e: 0.72, type: 'tennis', radius: 0.48, mass: 0.058, squash: 0.22 },
+      wood:      { e: 0.60, type: 'wood',   radius: 0.52, mass: 0.65, squash: 0.06 },
+      steel:     { e: 0.65, type: 'steel',  radius: 0.38, mass: 1.80, squash: 0.02 },
+      clay:      { e: 0.05, type: 'clay',   radius: 0.48, mass: 0.45, squash: 0.30 },
+      custom:    { e: 0.99, type: 'custom', radius: 0.48, mass: 0.30, squash: 0.18 }
     };
 
-    const canvas = document.getElementById("simCanvas"); const ctx = canvas.getContext("2d");
+    const canvas = document.getElementById("simCanvas");
+    const canvasContainer = document.getElementById("canvas-container");
     const selA = document.getElementById("preset-a"), selB = document.getElementById("preset-b");
     const sldEA = document.getElementById("param-e-a"), sldEB = document.getElementById("param-e-b");
     const txtEA = document.getElementById("txt-e-a"), txtEB = document.getElementById("txt-e-b");
     const sldH = document.getElementById("param-h"), txtH = document.getElementById("txt-h");
     const sldG = document.getElementById("param-g"), txtG = document.getElementById("txt-g");
     const logBox = document.getElementById("log-box"), playPauseBtn = document.getElementById("btn-playpause");
+    const hudA = document.getElementById("hud-a"), hudAH = document.getElementById("hud-a-h"), hudAV = document.getElementById("hud-a-v");
+    const hudB = document.getElementById("hud-b"), hudBH = document.getElementById("hud-b-h"), hudBV = document.getElementById("hud-b-v");
 
     function closeAllDropdowns() {
       document.querySelectorAll('.custom-select-wrapper').forEach(w => w.classList.remove('open'));
@@ -1278,7 +1345,7 @@
       const input = document.getElementById(inputId);
       
       const stepOp = (mult) => {
-        if(input.disabled) return;
+        if (input.disabled) return;
         const step = parseFloat(input.step) || 1;
         const min = parseFloat(input.min);
         const max = parseFloat(input.max);
@@ -1299,9 +1366,572 @@
     bindStepButtons('btn-dec-h', 'btn-inc-h', 'param-h');
     bindStepButtons('btn-dec-g', 'btn-inc-g', 'param-g');
 
-    let groundY = 0, pixelsPerMeter = 45, lastTime = 0, visualMaxM = 11.0;
+    // =========================================================================
+    // THREE.JS 3D SCENE & CANNON-ES RIGID-BODY PHYSICS ENGINE
+    // =========================================================================
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: true,
+      powerPreference: 'high-performance'
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setClearColor(0x000000, 0);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const scene = new THREE.Scene();
+
+    // Procedural Studio IBL Environment for realistic PBR reflections (steel, rubber, clearcoat)
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    const roomEnv = new RoomEnvironment();
+    const envRT = pmremGenerator.fromScene(roomEnv, 0.04);
+    scene.environment = envRT.texture;
+    scene.environmentIntensity = 0.72;
+    roomEnv.dispose();
+    pmremGenerator.dispose();
+
+    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 1000);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.07;
+    controls.maxPolarAngle = Math.PI * 0.492; // Keep camera above the floor plane
+    controls.minPolarAngle = 0.08;
+    controls.enablePan = true;
+
+    let targetCamPos = new THREE.Vector3(3, 5, 14);
+    let targetControlsTarget = new THREE.Vector3(0, 3, 0);
+    let isCameraTransitioning = false;
+
+    controls.addEventListener('start', () => {
+      isCameraTransitioning = false;
+    });
+
+    document.getElementById('btn-reset-cam').addEventListener('click', () => {
+      frameCamera(false);
+    });
+
+    // Studio Lighting Rig
+    const hemiLight = new THREE.HemisphereLight(0xdbeafe, 0x1e293b, 0.65);
+    scene.add(hemiLight);
+
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(2048, 2048);
+    keyLight.shadow.bias = -0.0004;
+    keyLight.shadow.normalBias = 0.02;
+    scene.add(keyLight);
+
+    const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.75);
+    rimLight.position.set(-10, 8, -10);
+    scene.add(rimLight);
+
+    // Dynamic Scene Groups
+    const stageGroup = new THREE.Group();
+    const rulerGroup = new THREE.Group();
+    const simGroup = new THREE.Group();
+    const vfxGroup = new THREE.Group();
+    const apexGroup = new THREE.Group();
+    scene.add(stageGroup, rulerGroup, simGroup, vfxGroup, apexGroup);
+
+    // Reusable shared geometries
+    const unitSphereGeo = new THREE.SphereGeometry(1, 48, 36);
+    const trailSphereGeo = new THREE.SphereGeometry(1, 12, 10);
+    const sparkGeo = new THREE.SphereGeometry(0.055, 8, 6);
+
+    // Cannon-es Physics World
+    const world = new CANNON.World({
+      gravity: new CANNON.Vec3(0, -9.81, 0)
+    });
+    world.broadphase = new CANNON.SAPBroadphase(world);
+    world.allowSleep = false;
+    world.solver.iterations = 20;
+    world.solver.tolerance = 0.0001;
+
+    const groundPhysMat = new CANNON.Material('labGround');
+    const groundBody = new CANNON.Body({
+      mass: 0,
+      material: groundPhysMat,
+      shape: new CANNON.Plane()
+    });
+    groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+    groundBody.position.set(0, 0, 0);
+    world.addBody(groundBody);
+
+    // Procedural PBR Texture Cache
+    const textureCache = {};
+
+    function getAccentHex(isB) {
+      if (isLight) return isB ? '#ea580c' : '#0284c7';
+      return isB ? '#fb923c' : '#38bdf8';
+    }
+
+    function createProceduralTexture(kind, accentHex) {
+      const key = `${kind}_${accentHex}`;
+      if (textureCache[key]) return textureCache[key];
+
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 256;
+      const g = c.getContext('2d');
+
+      if (kind === 'tennis') {
+        // Fuzzy optic yellow-green felt with classic curved white seam
+        g.fillStyle = '#c8e62e';
+        g.fillRect(0, 0, 512, 256);
+        for (let i = 0; i < 9000; i++) {
+          const x = Math.random() * 512;
+          const y = Math.random() * 256;
+          g.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,220,0.22)' : 'rgba(120,150,10,0.22)';
+          g.fillRect(x, y, 2, 2);
+        }
+        g.strokeStyle = '#f8fafc';
+        g.lineWidth = 10;
+        g.beginPath();
+        for (let x = 0; x <= 512; x += 4) {
+          const t = (x / 512) * Math.PI * 2;
+          const y = 128 + Math.sin(t * 2) * 58;
+          if (x === 0) g.moveTo(x, y);
+          else g.lineTo(x, y);
+        }
+        g.stroke();
+      } else if (kind === 'wood') {
+        // Warm layered solid hardwood grain
+        const grad = g.createLinearGradient(0, 0, 0, 256);
+        grad.addColorStop(0, '#9a6338');
+        grad.addColorStop(0.5, '#b87a48');
+        grad.addColorStop(1, '#85512b');
+        g.fillStyle = grad;
+        g.fillRect(0, 0, 512, 256);
+        for (let y = 0; y < 256; y += 3) {
+          const alpha = 0.08 + Math.random() * 0.14;
+          g.strokeStyle = Math.random() > 0.4 ? `rgba(60,30,10,${alpha})` : `rgba(230,180,120,${alpha * 0.7})`;
+          g.lineWidth = 1 + Math.random() * 2;
+          g.beginPath();
+          for (let x = 0; x <= 512; x += 16) {
+            const wave = Math.sin(x * 0.025 + y * 0.09) * 6;
+            if (x === 0) g.moveTo(x, y + wave);
+            else g.lineTo(x, y + wave);
+          }
+          g.stroke();
+        }
+      } else if (kind === 'clay') {
+        // Matte earthy terracotta clay with subtle organic mottling
+        g.fillStyle = '#a4644c';
+        g.fillRect(0, 0, 512, 256);
+        for (let i = 0; i < 3500; i++) {
+          const x = Math.random() * 512;
+          const y = Math.random() * 256;
+          const r = 1 + Math.random() * 4;
+          g.fillStyle = Math.random() > 0.5 ? 'rgba(195,130,105,0.16)' : 'rgba(85,42,30,0.18)';
+          g.beginPath();
+          g.arc(x, y, r, 0, Math.PI * 2);
+          g.fill();
+        }
+      } else if (kind === 'rubber') {
+        // Glossy superball with dynamic studio racing stripe
+        g.fillStyle = accentHex;
+        g.fillRect(0, 0, 512, 256);
+        g.fillStyle = 'rgba(255,255,255,0.22)';
+        g.fillRect(0, 114, 512, 28);
+        g.fillStyle = 'rgba(255,255,255,0.55)';
+        g.fillRect(0, 124, 512, 8);
+      } else {
+        // Custom composite sphere with subtle telemetry bands
+        g.fillStyle = accentHex;
+        g.fillRect(0, 0, 512, 256);
+        g.strokeStyle = 'rgba(255,255,255,0.35)';
+        g.lineWidth = 3;
+        g.beginPath();
+        g.moveTo(0, 128); g.lineTo(512, 128);
+        g.moveTo(0, 64); g.lineTo(512, 64);
+        g.moveTo(0, 192); g.lineTo(512, 192);
+        g.stroke();
+      }
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.ClampToEdgeWrapping;
+      textureCache[key] = tex;
+      return tex;
+    }
+
+    function createBallMaterial(presetKey, isB) {
+      const accentHex = getAccentHex(isB);
+      if (presetKey === 'steel') {
+        return new THREE.MeshPhysicalMaterial({
+          color: 0xe2e8f0,
+          metalness: 0.96,
+          roughness: 0.12,
+          clearcoat: 0.45,
+          clearcoatRoughness: 0.1
+        });
+      }
+      if (presetKey === 'tennis') {
+        const tex = createProceduralTexture('tennis', accentHex);
+        return new THREE.MeshStandardMaterial({
+          map: tex,
+          bumpMap: tex,
+          bumpScale: 0.015,
+          roughness: 0.92,
+          metalness: 0.0
+        });
+      }
+      if (presetKey === 'wood') {
+        const tex = createProceduralTexture('wood', accentHex);
+        return new THREE.MeshStandardMaterial({
+          map: tex,
+          bumpMap: tex,
+          bumpScale: 0.012,
+          roughness: 0.56,
+          metalness: 0.03
+        });
+      }
+      if (presetKey === 'clay') {
+        const tex = createProceduralTexture('clay', accentHex);
+        return new THREE.MeshStandardMaterial({
+          map: tex,
+          bumpMap: tex,
+          bumpScale: 0.02,
+          roughness: 0.96,
+          metalness: 0.0
+        });
+      }
+      if (presetKey === 'superball') {
+        const tex = createProceduralTexture('rubber', accentHex);
+        return new THREE.MeshPhysicalMaterial({
+          map: tex,
+          roughness: 0.16,
+          metalness: 0.05,
+          clearcoat: 1.0,
+          clearcoatRoughness: 0.08
+        });
+      }
+      const tex = createProceduralTexture('custom', accentHex);
+      return new THREE.MeshPhysicalMaterial({
+        map: tex,
+        roughness: 0.24,
+        metalness: 0.35,
+        clearcoat: 0.8,
+        clearcoatRoughness: 0.12
+      });
+    }
+
+    function createRadialFloorTexture(lightMode) {
+      const c = document.createElement('canvas');
+      c.width = 1024;
+      c.height = 1024;
+      const g = c.getContext('2d');
+      const cx = 512, cy = 512;
+
+      const bgGrad = g.createRadialGradient(cx, cy, 40, cx, cy, 500);
+      if (lightMode) {
+        bgGrad.addColorStop(0, 'rgba(226, 232, 240, 0.96)');
+        bgGrad.addColorStop(0.68, 'rgba(203, 213, 225, 0.85)');
+        bgGrad.addColorStop(1, 'rgba(203, 213, 225, 0)');
+      } else {
+        bgGrad.addColorStop(0, 'rgba(26, 33, 46, 0.96)');
+        bgGrad.addColorStop(0.68, 'rgba(15, 20, 30, 0.85)');
+        bgGrad.addColorStop(1, 'rgba(15, 20, 30, 0)');
+      }
+      g.fillStyle = bgGrad;
+      g.fillRect(0, 0, 1024, 1024);
+
+      // Precision calibrated grid inside circular mask
+      g.save();
+      g.beginPath();
+      g.arc(cx, cy, 480, 0, Math.PI * 2);
+      g.clip();
+
+      g.strokeStyle = lightMode ? 'rgba(15, 23, 42, 0.09)' : 'rgba(56, 189, 248, 0.11)';
+      g.lineWidth = 1.5;
+      const step = 48;
+      for (let i = 0; i <= 1024; i += step) {
+        g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 1024); g.stroke();
+        g.beginPath(); g.moveTo(0, i); g.lineTo(1024, i); g.stroke();
+      }
+
+      // Concentric calibration rings
+      g.strokeStyle = lightMode ? 'rgba(2, 132, 199, 0.22)' : 'rgba(56, 189, 248, 0.22)';
+      g.lineWidth = 2;
+      [140, 280, 420].forEach(r => {
+        g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
+      });
+      g.restore();
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      return tex;
+    }
+
+    function createLabelSprite(text, colorStr, fontSize = 44) {
+      const c = document.createElement('canvas');
+      c.width = 256;
+      c.height = 96;
+      const g = c.getContext('2d');
+      g.font = `600 ${fontSize}px "JetBrains Mono", monospace`;
+      g.textAlign = 'right';
+      g.textBaseline = 'middle';
+      g.fillStyle = colorStr;
+      g.fillText(text, 238, 48);
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+      const sprite = new THREE.Sprite(mat);
+      return sprite;
+    }
+
+    function disposeGroup(group) {
+      while (group.children.length > 0) {
+        const obj = group.children[0];
+        group.remove(obj);
+        obj.traverse((child) => {
+          if (child.geometry && child.geometry !== unitSphereGeo && child.geometry !== trailSphereGeo && child.geometry !== sparkGeo) {
+            child.geometry.dispose();
+          }
+          if (child.material) {
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            mats.forEach(m => {
+              if (m.map && !Object.values(textureCache).includes(m.map)) m.map.dispose();
+              m.dispose();
+            });
+          }
+        });
+      }
+    }
+
+    // Simulation state
+    let visualMaxM = 8.0;
+    let ballSep = 1.6;
+    let lastTime = 0;
+    let physicsAccumulator = 0;
     let ballA = null, ballB = null, syncLogs = [];
     let isPaused = false, isDropped = false;
+    const activeVFX = [];
+    const _projVec = new THREE.Vector3();
+
+    function getVisualRadius(rM) {
+      return Math.max(rM, visualMaxM * 0.028);
+    }
+
+    function buildLabStage() {
+      disposeGroup(stageGroup);
+
+      const platformR = Math.max(4.5, visualMaxM * 0.56);
+
+      // Soft-shadow receiving circular lab floor
+      const floorGeo = new THREE.CircleGeometry(platformR, 72);
+      floorGeo.rotateX(-Math.PI / 2);
+      const floorTex = createRadialFloorTexture(isLight);
+      const floorMat = new THREE.MeshStandardMaterial({
+        map: floorTex,
+        transparent: true,
+        roughness: isLight ? 0.65 : 0.45,
+        metalness: isLight ? 0.08 : 0.25
+      });
+      const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+      floorMesh.receiveShadow = true;
+      stageGroup.add(floorMesh);
+
+      // Subtle bevelled metallic impact plate beneath drop zone
+      const anvilR = isDualMode ? Math.max(2.8, ballSep * 1.95) : Math.max(1.8, visualMaxM * 0.22);
+      const anvilH = Math.max(0.08, visualMaxM * 0.012);
+      const anvilGeo = new THREE.CylinderGeometry(anvilR, anvilR * 1.04, anvilH, 64);
+      const anvilMat = new THREE.MeshStandardMaterial({
+        color: isLight ? 0xdbe4ee : 0x161d29,
+        roughness: isLight ? 0.4 : 0.32,
+        metalness: isLight ? 0.25 : 0.65
+      });
+      const anvilMesh = new THREE.Mesh(anvilGeo, anvilMat);
+      anvilMesh.position.y = -anvilH / 2 - 0.002;
+      anvilMesh.receiveShadow = true;
+      stageGroup.add(anvilMesh);
+
+      // Rim highlight ring around anvil
+      const rimGeo = new THREE.RingGeometry(anvilR * 0.985, anvilR * 1.005, 64);
+      rimGeo.rotateX(-Math.PI / 2);
+      const rimMat = new THREE.MeshBasicMaterial({
+        color: isLight ? 0x0284c7 : 0x38bdf8,
+        transparent: true,
+        opacity: 0.45,
+        side: THREE.DoubleSide
+      });
+      const rimMesh = new THREE.Mesh(rimGeo, rimMat);
+      rimMesh.position.y = 0.004;
+      stageGroup.add(rimMesh);
+
+      // Target pads directly below Ball A (and Ball B in Compare Mode)
+      const addTargetPad = (xPos, hexColor) => {
+        const vr = getVisualRadius(0.48);
+        const padGeo = new THREE.RingGeometry(vr * 0.92, vr * 1.12, 48);
+        padGeo.rotateX(-Math.PI / 2);
+        const padMat = new THREE.MeshBasicMaterial({
+          color: hexColor,
+          transparent: true,
+          opacity: isLight ? 0.55 : 0.6,
+          side: THREE.DoubleSide
+        });
+        const pad = new THREE.Mesh(padGeo, padMat);
+        pad.position.set(xPos, 0.006, 0);
+        stageGroup.add(pad);
+      };
+
+      if (isDualMode) {
+        addTargetPad(-ballSep, getAccentHex(false));
+        addTargetPad(ballSep, getAccentHex(true));
+      } else {
+        addTargetPad(0, getAccentHex(false));
+      }
+
+      // Dynamically position & size shadow camera to cover the active drop height cleanly
+      keyLight.position.set(visualMaxM * 0.65, visualMaxM * 1.65, visualMaxM * 0.95);
+      const shExtent = Math.max(6, platformR * 1.15);
+      keyLight.shadow.camera.left = -shExtent;
+      keyLight.shadow.camera.right = shExtent;
+      keyLight.shadow.camera.top = shExtent;
+      keyLight.shadow.camera.bottom = -shExtent;
+      keyLight.shadow.camera.near = 0.5;
+      keyLight.shadow.camera.far = visualMaxM * 4.5 + 20;
+      keyLight.shadow.camera.updateProjectionMatrix();
+    }
+
+    function buildRuler() {
+      disposeGroup(rulerGroup);
+
+      const h0 = parseFloat(sldH.value);
+      const rulerX = isDualMode
+        ? -(ballSep + getVisualRadius(0.52) * 2.6 + visualMaxM * 0.06)
+        : -Math.max(1.85, visualMaxM * 0.25);
+
+      const rodRadius = Math.max(0.025, visualMaxM * 0.004);
+      const rodGeo = new THREE.CylinderGeometry(rodRadius, rodRadius, visualMaxM, 12);
+      const rodMat = new THREE.MeshStandardMaterial({
+        color: isLight ? 0x64748b : 0x475569,
+        metalness: 0.7,
+        roughness: 0.3
+      });
+      const rod = new THREE.Mesh(rodGeo, rodMat);
+      rod.position.set(rulerX, visualMaxM / 2, 0);
+      rulerGroup.add(rod);
+
+      // Base foot of pylon
+      const footGeo = new THREE.CylinderGeometry(rodRadius * 3.5, rodRadius * 4.2, rodRadius * 3, 16);
+      const foot = new THREE.Mesh(footGeo, rodMat);
+      foot.position.set(rulerX, rodRadius * 1.5, 0);
+      rulerGroup.add(foot);
+
+      // Adaptive step size for meter ticks
+      let stepM = 1;
+      if (visualMaxM > 60) stepM = 10;
+      else if (visualMaxM > 28) stepM = 5;
+      else if (visualMaxM > 14) stepM = 2;
+      else if (visualMaxM <= 3.5) stepM = 0.5;
+
+      const tickLen = Math.max(0.24, visualMaxM * 0.032);
+      const tickMat = new THREE.MeshBasicMaterial({
+        color: isLight ? 0x334155 : 0x94a3b8,
+        transparent: true,
+        opacity: 0.75
+      });
+      const labelColor = isLight ? 'rgba(15, 23, 42, 0.8)' : 'rgba(226, 232, 240, 0.75)';
+      const spriteH = Math.max(0.38, visualMaxM * 0.052);
+
+      for (let m = 0; m <= visualMaxM + 0.001; m += stepM) {
+        const y = Math.round(m * 100) / 100;
+        const tickGeo = new THREE.BoxGeometry(tickLen, Math.max(0.015, visualMaxM * 0.0022), Math.max(0.015, visualMaxM * 0.0022));
+        const tick = new THREE.Mesh(tickGeo, tickMat);
+        tick.position.set(rulerX + tickLen / 2, y, 0);
+        rulerGroup.add(tick);
+
+        const labelText = Number.isInteger(y) ? `${y}m` : `${y.toFixed(1)}m`;
+        const sprite = createLabelSprite(labelText, labelColor);
+        sprite.scale.set(spriteH * (256 / 96), spriteH, 1);
+        sprite.position.set(rulerX - spriteH * 1.45, y, 0);
+        rulerGroup.add(sprite);
+      }
+
+      // Drop-height (h0) laser reference bar across the drop column
+      const guideSpan = Math.abs(rulerX) * 2.05;
+      const guidePts = [
+        new THREE.Vector3(rulerX, h0, 0),
+        new THREE.Vector3(rulerX + guideSpan, h0, 0)
+      ];
+      const guideGeo = new THREE.BufferGeometry().setFromPoints(guidePts);
+      const guideMat = new THREE.LineDashedMaterial({
+        color: isLight ? 0x0284c7 : 0x38bdf8,
+        dashSize: Math.max(0.14, visualMaxM * 0.022),
+        gapSize: Math.max(0.1, visualMaxM * 0.015),
+        transparent: true,
+        opacity: 0.55
+      });
+      const guideLine = new THREE.Line(guideGeo, guideMat);
+      guideLine.computeLineDistances();
+      rulerGroup.add(guideLine);
+    }
+
+    function applyThreeTheme() {
+      hemiLight.color.setHex(isLight ? 0xffffff : 0xdbeafe);
+      hemiLight.groundColor.setHex(isLight ? 0x94a3b8 : 0x1e293b);
+      hemiLight.intensity = isLight ? 0.95 : 0.65;
+      keyLight.intensity = isLight ? 1.9 : 2.2;
+      rimLight.color.setHex(isLight ? 0x0284c7 : 0x38bdf8);
+      scene.environmentIntensity = isLight ? 0.65 : 0.78;
+
+      if (ballA) {
+        buildLabStage();
+        buildRuler();
+        updateBallVisualAccent(ballA);
+        if (ballB) updateBallVisualAccent(ballB);
+      }
+    }
+
+    function updateBallVisualAccent(ball) {
+      const hex = getAccentHex(ball.isB);
+      if (ball.ringMesh) ball.ringMesh.material.color.set(hex);
+      if (ball.plumbLine) ball.plumbLine.material.color.set(hex);
+      if (ball.trailMeshes) {
+        ball.trailMeshes.forEach(m => m.material.color.set(hex));
+      }
+      if (ball.presetKey === 'superball' || ball.presetKey === 'custom') {
+        const oldMat = ball.mesh.material;
+        ball.mesh.material = createBallMaterial(ball.presetKey, ball.isB);
+        oldMat.dispose();
+      }
+    }
+
+    function frameCamera(instant = false) {
+      const fovRad = THREE.MathUtils.degToRad(camera.fov);
+      const aspect = Math.max(0.4, camera.aspect || 1);
+      const centerY = visualMaxM * 0.45;
+      const halfH = visualMaxM * 0.62;
+      const distV = halfH / Math.tan(fovRad / 2);
+
+      const halfW = (isDualMode ? ballSep * 2.15 : visualMaxM * 0.42) + visualMaxM * 0.25;
+      const hFovHalf = Math.atan(Math.tan(fovRad / 2) * aspect);
+      const distH = halfW / Math.tan(hFovHalf);
+      const dist = Math.max(distV, distH);
+
+      targetCamPos.set(dist * 0.16, centerY + dist * 0.17, dist * 0.98);
+      targetControlsTarget.set(0, centerY, 0);
+
+      controls.minDistance = Math.max(1.8, visualMaxM * 0.35);
+      controls.maxDistance = Math.max(24, visualMaxM * 4.5);
+
+      if (instant) {
+        camera.position.copy(targetCamPos);
+        controls.target.copy(targetControlsTarget);
+        controls.update();
+        isCameraTransitioning = false;
+      } else {
+        isCameraTransitioning = true;
+      }
+    }
 
     function updateMaterialState(sel, sld, txt) {
       const parent = sld.parentElement;
@@ -1313,27 +1943,48 @@
       txt.textContent = parseFloat(sld.value).toFixed(2);
     }
 
-    selA.onchange = () => { updateMaterialState(selA, sldEA, txtEA); prepareSim(); };
-    selB.onchange = () => { updateMaterialState(selB, sldEB, txtEB); prepareSim(); };
-    sldEA.oninput = () => { txtEA.textContent = parseFloat(sldEA.value).toFixed(2); prepareSim(); };
-    sldEB.oninput = () => { txtEB.textContent = parseFloat(sldEB.value).toFixed(2); prepareSim(); };
-    sldH.oninput = () => { txtH.textContent = parseFloat(sldH.value).toFixed(1) + " m"; prepareSim(); };
-    sldG.oninput = () => { txtG.textContent = parseFloat(sldG.value).toFixed(2) + " m/s²"; prepareSim(); };
-    document.getElementById("btn-reset-g").addEventListener("click", () => { sldG.value = 9.81; txtG.textContent = "9.81 m/s²"; prepareSim(); });
+    selA.onchange = () => { updateMaterialState(selA, sldEA, txtEA); prepareSim(false); };
+    selB.onchange = () => { updateMaterialState(selB, sldEB, txtEB); prepareSim(false); };
+    sldEA.oninput = () => { txtEA.textContent = parseFloat(sldEA.value).toFixed(2); prepareSim(false); };
+    sldEB.oninput = () => { txtEB.textContent = parseFloat(sldEB.value).toFixed(2); prepareSim(false); };
+    sldH.oninput = () => { txtH.textContent = parseFloat(sldH.value).toFixed(1) + " m"; prepareSim(false); };
+    sldG.oninput = () => { txtG.textContent = parseFloat(sldG.value).toFixed(2) + " m/s²"; prepareSim(false); };
+    document.getElementById("btn-reset-g").addEventListener("click", () => { sldG.value = 9.81; txtG.textContent = "9.81 m/s²"; prepareSim(false); });
     
     updateMaterialState(selA, sldEA, txtEA); updateMaterialState(selB, sldEB, txtEB);
 
     function resizeCanvas() {
-      const rectC = canvas.parentElement.getBoundingClientRect();
-      canvas.width = rectC.width * (window.devicePixelRatio || 1); canvas.height = rectC.height * (window.devicePixelRatio || 1);
-      ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
-      groundY = rectC.height - 40;
+      const w = canvasContainer.clientWidth;
+      const h = canvasContainer.clientHeight;
+      if (w <= 0 || h <= 0) return;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
     }
-    window.addEventListener("resize", () => { if(simScreen.classList.contains("active")) { resizeCanvas(); prepareSim(); } });
+
+    const resizeObs = new ResizeObserver(() => {
+      if (simScreen.classList.contains("active")) {
+        resizeCanvas();
+      }
+    });
+    resizeObs.observe(canvasContainer);
+
+    window.addEventListener("resize", () => {
+      if (simScreen.classList.contains("active")) {
+        resizeCanvas();
+      }
+    });
     
     document.getElementById("btn-drop").onclick = () => {
-      if (!isDropped || (ballA && ballA.settled)) { prepareSim(); }
-      isDropped = true; isPaused = false; 
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const allSettled = ballA && ballA.settled && (!ballB || ballB.settled);
+      if (!isDropped || allSettled) {
+        prepareSim(false);
+      }
+      isDropped = true;
+      isPaused = false;
+      physicsAccumulator = 0;
       document.getElementById("text-playpause").textContent = "Pause";
       document.getElementById("icon-pause").style.display = "block";
       document.getElementById("icon-play").style.display = "none";
@@ -1349,27 +2000,278 @@
       playPauseBtn.classList.toggle("paused", isPaused);
     };
 
-    function createBall(isB, eVal, presetKey, startX) {
-      const p = PRESETS[presetKey] || PRESETS['custom'];
-      return { x: startX, yM: parseFloat(sldH.value) + p.radius, vy: 0, rM: p.radius, e: parseFloat(eVal), type: p.type, 
-               isB: isB, bounces: 0, settled: false, apexLogged: false, initialH: parseFloat(sldH.value), trail: [] };
+    function clearPhysicsBalls() {
+      [ballA, ballB].forEach(b => {
+        if (!b) return;
+        if (b.body) world.removeBody(b.body);
+        if (b.contactMat) world.removeContactMaterial(b.contactMat);
+      });
     }
 
-    function prepareSim() {
-      syncLogs = []; isDropped = false; isPaused = false; 
+    function createBall(isB, eVal, presetKey, xPos) {
+      const p = PRESETS[presetKey] || PRESETS['custom'];
+      const h0 = parseFloat(sldH.value);
+      const eNum = parseFloat(eVal);
+      const visualR = getVisualRadius(p.radius);
+      const accentHex = getAccentHex(isB);
+
+      // Cannon-es Rigid Body + Material + ContactMaterial
+      const physMat = new CANNON.Material(isB ? 'ballBMat' : 'ballAMat');
+      const contactMat = new CANNON.ContactMaterial(groundPhysMat, physMat, {
+        friction: 0,
+        restitution: eNum,
+        contactEquationStiffness: 1e9,
+        contactEquationRelaxation: 1
+      });
+      world.addContactMaterial(contactMat);
+
+      const body = new CANNON.Body({
+        mass: p.mass,
+        shape: new CANNON.Sphere(p.radius),
+        material: physMat,
+        position: new CANNON.Vec3(xPos, h0 + p.radius, 0),
+        linearDamping: 0,
+        angularDamping: 0,
+        linearFactor: new CANNON.Vec3(0, 1, 0),
+        angularFactor: new CANNON.Vec3(0, 0, 0)
+      });
+      world.addBody(body);
+
+      // Three.js PBR Mesh
+      const mesh = new THREE.Mesh(unitSphereGeo, createBallMaterial(presetKey, isB));
+      mesh.scale.set(visualR, visualR, visualR);
+      mesh.position.set(xPos, h0 + visualR, 0);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      simGroup.add(mesh);
+
+      // Subtle equatorial accent ring to identify Ball A / Ball B clearly across all presets
+      const ringGeo = new THREE.TorusGeometry(visualR * 1.07, Math.max(0.014, visualR * 0.032), 10, 40);
+      ringGeo.rotateX(Math.PI / 2);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: accentHex,
+        transparent: true,
+        opacity: 0.72
+      });
+      const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+      ringMesh.position.copy(mesh.position);
+      simGroup.add(ringMesh);
+
+      // Vertical plumb reference line from ball to floor
+      const plumbGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(xPos, 0.01, 0),
+        new THREE.Vector3(xPos, h0 + visualR, 0)
+      ]);
+      const plumbMat = new THREE.LineBasicMaterial({
+        color: accentHex,
+        transparent: true,
+        opacity: 0.25
+      });
+      const plumbLine = new THREE.Line(plumbGeo, plumbMat);
+      simGroup.add(plumbLine);
+
+      // Pooled 3D motion trail spheres (zero per-frame allocations)
+      const trailMeshes = [];
+      const trailCount = 16;
+      for (let i = 0; i < trailCount; i++) {
+        const tm = new THREE.Mesh(
+          trailSphereGeo,
+          new THREE.MeshBasicMaterial({
+            color: accentHex,
+            transparent: true,
+            opacity: 0,
+            depthWrite: false
+          })
+        );
+        tm.visible = false;
+        simGroup.add(tm);
+        trailMeshes.push(tm);
+      }
+
+      return {
+        x: xPos,
+        rM: p.radius,
+        visualR,
+        e: eNum,
+        type: p.type,
+        presetKey,
+        squashMax: p.squash,
+        isB,
+        bounces: 0,
+        settled: false,
+        apexLogged: false,
+        initialH: h0,
+        body,
+        contactMat,
+        mesh,
+        ringMesh,
+        plumbLine,
+        trail: [],
+        trailMeshes,
+        // Damped harmonic oscillator state for physical impact squash-and-stretch
+        scaleY: 1.0,
+        scaleVel: 0.0
+      };
+    }
+
+    function spawnApexMarker(ball, apexHeightM) {
+      if (ball.bounces > 6 || apexHeightM < 0.04) return;
+      const accentHex = getAccentHex(ball.isB);
+      const vr = ball.visualR;
+      const ringGeo = new THREE.RingGeometry(vr * 1.15, vr * 1.28, 40);
+      ringGeo.rotateX(-Math.PI / 2);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: accentHex,
+        transparent: true,
+        opacity: Math.max(0.22, 0.65 - (ball.bounces - 1) * 0.08),
+        side: THREE.DoubleSide,
+        depthWrite: false
+      });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.position.set(ball.x, apexHeightM, 0);
+      apexGroup.add(ring);
+    }
+
+    function triggerImpactVFX(ball, impactSpeed) {
+      const intensity = Math.min(1, Math.max(0.15, impactSpeed / 18));
+
+      // Volume-conserving squash impulse proportional to material softness & impact speed
+      const squashDip = Math.min(0.36, ball.squashMax * (0.35 + intensity * 0.95));
+      ball.scaleY = Math.max(0.62, 1.0 - squashDip);
+      ball.scaleVel = 0;
+
+      if (impactSpeed < 0.35) return;
+
+      const accentHex = getAccentHex(ball.isB);
+      const vr = ball.visualR;
+
+      // 1. Expanding floor shockwave ring
+      const swGeo = new THREE.RingGeometry(vr * 0.6, vr * 0.9, 40);
+      swGeo.rotateX(-Math.PI / 2);
+      const swMat = new THREE.MeshBasicMaterial({
+        color: accentHex,
+        transparent: true,
+        opacity: 0.75 * intensity,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      });
+      const swMesh = new THREE.Mesh(swGeo, swMat);
+      swMesh.position.set(ball.x, 0.015, 0);
+      vfxGroup.add(swMesh);
+
+      activeVFX.push({
+        kind: 'ring',
+        mesh: swMesh,
+        age: 0,
+        duration: 0.45,
+        maxScale: 2.2 + intensity * 2.4,
+        baseOpacity: 0.75 * intensity
+      });
+
+      // 2. Micro-sparks / energy pips launched from contact point
+      const sparkCount = Math.floor(6 + intensity * 8);
+      const sparkColor = ball.presetKey === 'steel' ? 0xfef08a : accentHex;
+      for (let i = 0; i < sparkCount; i++) {
+        const angle = (i / sparkCount) * Math.PI * 2 + Math.random() * 0.4;
+        const speed = (1.2 + Math.random() * 2.8) * (0.6 + intensity) * Math.max(1, visualMaxM / 12);
+        const sm = new THREE.Mesh(
+          sparkGeo,
+          new THREE.MeshBasicMaterial({
+            color: sparkColor,
+            transparent: true,
+            opacity: 0.9,
+            depthWrite: false
+          })
+        );
+        const sScale = Math.max(0.6, vr * 1.4);
+        sm.scale.setScalar(sScale);
+        sm.position.set(ball.x + Math.cos(angle) * vr * 0.3, 0.06, Math.sin(angle) * vr * 0.3);
+        vfxGroup.add(sm);
+
+        activeVFX.push({
+          kind: 'spark',
+          mesh: sm,
+          vx: Math.cos(angle) * speed,
+          vy: (0.8 + Math.random() * 1.8) * speed * 0.55,
+          vz: Math.sin(angle) * speed,
+          age: 0,
+          duration: 0.35 + Math.random() * 0.18
+        });
+      }
+    }
+
+    function updateVFX(dt) {
+      const g = parseFloat(sldG.value);
+      for (let i = activeVFX.length - 1; i >= 0; i--) {
+        const fx = activeVFX[i];
+        fx.age += dt;
+        const t = fx.age / fx.duration;
+        if (t >= 1) {
+          vfxGroup.remove(fx.mesh);
+          if (fx.mesh.geometry !== sparkGeo) fx.mesh.geometry.dispose();
+          fx.mesh.material.dispose();
+          activeVFX.splice(i, 1);
+          continue;
+        }
+        if (fx.kind === 'ring') {
+          const eased = 1 - Math.pow(1 - t, 3);
+          const s = 1 + eased * (fx.maxScale - 1);
+          fx.mesh.scale.set(s, 1, s);
+          fx.mesh.material.opacity = fx.baseOpacity * (1 - t);
+        } else if (fx.kind === 'spark') {
+          fx.vy -= g * dt;
+          fx.mesh.position.x += fx.vx * dt;
+          fx.mesh.position.y = Math.max(0.03, fx.mesh.position.y + fx.vy * dt);
+          fx.mesh.position.z += fx.vz * dt;
+          fx.mesh.material.opacity = 0.9 * (1 - t);
+        }
+      }
+    }
+
+    function clearVFX() {
+      activeVFX.length = 0;
+      disposeGroup(vfxGroup);
+    }
+
+    function prepareSim(instantCamera = false) {
+      clearPhysicsBalls();
+      disposeGroup(simGroup);
+      disposeGroup(apexGroup);
+      clearVFX();
+
+      syncLogs = [];
+      isDropped = false;
+      isPaused = false;
+      physicsAccumulator = 0;
+
       document.getElementById("text-playpause").textContent = "Pause";
       document.getElementById("icon-pause").style.display = "block";
       document.getElementById("icon-play").style.display = "none";
       playPauseBtn.classList.remove("paused");
       
       const h0 = parseFloat(sldH.value);
-      visualMaxM = Math.max(11.0, h0 * 1.15);
-      pixelsPerMeter = (groundY - 40) / visualMaxM;
+      const g = parseFloat(sldG.value);
+      world.gravity.set(0, -g, 0);
 
-      const cw = canvas.parentElement.clientWidth;
+      visualMaxM = Math.max(2.5, h0 * 1.24);
+      ballSep = Math.max(1.35, visualMaxM * 0.14);
+
+      buildLabStage();
+      buildRuler();
+
       if (isDualMode) {
-        ballA = createBall(false, sldEA.value, selA.value, cw * 0.35); ballB = createBall(true, sldEB.value, selB.value, cw * 0.65);
-      } else { ballA = createBall(false, sldEA.value, selA.value, cw * 0.5); ballB = null; }
+        ballA = createBall(false, sldEA.value, selA.value, -ballSep);
+        ballB = createBall(true, sldEB.value, selB.value, ballSep);
+        hudA.style.display = 'flex';
+        hudB.style.display = 'flex';
+      } else {
+        ballA = createBall(false, sldEA.value, selA.value, 0);
+        ballB = null;
+        hudA.style.display = 'flex';
+        hudB.style.display = 'none';
+      }
+
+      frameCamera(instantCamera);
       renderLogs();
     }
 
@@ -1385,7 +2287,7 @@
         return;
       }
       const lastIdx = syncLogs.length - 1;
-      if(isDualMode) {
+      if (isDualMode) {
         html += `<div class="log-header-dual"><span>Bounce</span><span>Ball</span><span>Height Retained</span><span>Energy Retained</span></div>`;
         syncLogs.forEach((log, i) => {
           const newCls = i === lastIdx ? ' log-row-new' : '';
@@ -1413,127 +2315,229 @@
       logBox.innerHTML = html; logBox.scrollTop = logBox.scrollHeight;
     }
 
-    function processPhysics(ball, dt, isB) {
-      if (ball.settled) return;
-      const g = parseFloat(sldG.value);
-      const prevY = ball.yM;
-      const prevVy = ball.vy;
+    function logApex(ball, maxM) {
+      if (!syncLogs[ball.bounces - 1]) syncLogs[ball.bounces - 1] = { a: null, b: null };
+      const p = ((maxM / ball.initialH) * 100).toFixed(1);
+      const logData = { h: maxM.toFixed(2) + " m", e: p + "%" };
+      if (!ball.isB) syncLogs[ball.bounces - 1].a = logData;
+      else syncLogs[ball.bounces - 1].b = logData;
+      ball.apexLogged = true;
+      spawnApexMarker(ball, maxM);
+      renderLogs();
+    }
 
-      ball.yM = prevY + prevVy * dt - 0.5 * g * (dt * dt);
-      ball.vy = prevVy - g * dt;
+    // Exact CCD Time-of-Impact & Impulse Resolution synchronized with Cannon-es Body & ContactMaterial
+    function resolveBallSubstep(ball, y0, v0, dt, g) {
+      let curY = y0;
+      let curV = v0;
+      let remDt = dt;
+      let iter = 0;
+      const r = ball.rM;
+      const e = ball.contactMat.restitution;
 
-      if (ball.yM <= ball.rM) {
-        const impactSq = prevVy * prevVy + 2 * g * (prevY - ball.rM);
-        const impact = Math.sqrt(Math.max(0, impactSq));
-        
-        playBounceSound(ball.type, impact); 
-        ball.vy = impact * ball.e; 
-        ball.yM = ball.rM;
-        ball.bounces++; 
-        ball.apexLogged = false;
-        
-        if (impact < 0.2) {
-          ball.vy = 0; ball.yM = ball.rM; ball.settled = true;
-          if(!syncLogs[ball.bounces-1]) syncLogs[ball.bounces-1] = { a: null, b: null };
-          if(!isB) syncLogs[ball.bounces-1].a = "Settled"; else syncLogs[ball.bounces-1].b = "Settled";
-          renderLogs();
-        }
-      } 
-      else if (ball.bounces > 0 && !ball.apexLogged && !ball.settled) {
-        if (ball.vy <= 0 && prevVy > 0) {
-          const t_apex = prevVy / g;
-          const exact_y = prevY + prevVy * t_apex - 0.5 * g * (t_apex * t_apex);
-          const maxM = Math.max(0, exact_y - ball.rM);
-          
-          if(!syncLogs[ball.bounces-1]) syncLogs[ball.bounces-1] = { a: null, b: null };
-          const p = ((maxM / ball.initialH) * 100).toFixed(1);
-          const logData = { h: maxM.toFixed(2) + " m", e: p + "%" };
-          
-          if(!isB) syncLogs[ball.bounces-1].a = logData; else syncLogs[ball.bounces-1].b = logData;
-          renderLogs(); ball.apexLogged = true;
+      while (remDt > 1e-8 && !ball.settled && iter < 16) {
+        iter++;
+        const nextY = curY + curV * remDt - 0.5 * g * remDt * remDt;
+        const nextV = curV - g * remDt;
+
+        if (nextY <= r) {
+          const disc = Math.max(0, curV * curV + 2 * g * Math.max(0, curY - r));
+          const vImpact = Math.sqrt(disc);
+          let tHit = (curV + vImpact) / g;
+          tHit = Math.max(0, Math.min(remDt, tHit));
+
+          // Detect and log any micro-apex occurring inside this substep prior to impact
+          if (ball.bounces > 0 && !ball.apexLogged && curV > 0) {
+            const tApex = curV / g;
+            if (tApex < tHit) {
+              const apexY = curY + curV * tApex - 0.5 * g * tApex * tApex;
+              logApex(ball, Math.max(0, apexY - r));
+            }
+          }
+
+          // Snap Cannon-es body to exact contact instant
+          ball.body.position.y = r;
+          ball.body.velocity.y = -vImpact;
+
+          playBounceSound(ball.type, vImpact);
+          triggerImpactVFX(ball, vImpact);
+
+          ball.bounces++;
+          ball.apexLogged = false;
+
+          if (vImpact < 0.2) {
+            ball.body.velocity.set(0, 0, 0);
+            ball.body.position.y = r;
+            ball.body.type = CANNON.Body.STATIC;
+            ball.body.updateMassProperties();
+            ball.settled = true;
+
+            if (!syncLogs[ball.bounces - 1]) syncLogs[ball.bounces - 1] = { a: null, b: null };
+            if (!ball.isB) syncLogs[ball.bounces - 1].a = "Settled";
+            else syncLogs[ball.bounces - 1].b = "Settled";
+            renderLogs();
+            return;
+          }
+
+          // Apply exact restitution impulse J = m * (1 + e) * v_impact via Cannon-es Body API
+          const impulseY = ball.body.mass * (1 + e) * vImpact;
+          ball.body.applyImpulse(new CANNON.Vec3(0, impulseY, 0));
+
+          curY = ball.body.position.y;
+          curV = ball.body.velocity.y;
+          remDt -= tHit;
+
+          if (tHit < 1e-9 && curV <= 0) break;
+        } else {
+          // Pure airborne flight: detect exact apex crossing
+          if (ball.bounces > 0 && !ball.apexLogged && curV > 0 && nextV <= 0) {
+            const tApex = curV / g;
+            const apexY = curY + curV * tApex - 0.5 * g * tApex * tApex;
+            logApex(ball, Math.max(0, apexY - r));
+          }
+          // Exact symplectic Velocity-Verlet sync on Cannon-es body (zero energy drift)
+          ball.body.position.y = nextY;
+          ball.body.velocity.y = nextV;
+          remDt = 0;
         }
       }
     }
 
-    function getCssColor(varName) { return getComputedStyle(document.documentElement).getPropertyValue(varName).trim(); }
+    function stepPhysics(frameDt) {
+      const g = parseFloat(sldG.value);
+      world.gravity.set(0, -g, 0);
 
-    function drawBall(ball) {
-      const baseRPx = ball.rM * pixelsPerMeter;
-      const visualRPx = Math.max(baseRPx, 8);
-      const yPx = groundY - (ball.yM * pixelsPerMeter) - (visualRPx - baseRPx); 
-      const accentHex = getCssColor(ball.isB ? '--accent-b' : '--accent-a');
+      const fixedDt = 1 / 240;
+      const maxSubsteps = 12 * simSpeed;
+      physicsAccumulator = Math.min(physicsAccumulator + frameDt * simSpeed, fixedDt * maxSubsteps);
 
-      // Motion trail: fading streak of recent positions, communicates velocity/direction at a glance
-      if (ball.trail && ball.trail.length > 1 && isDropped && !isPaused) {
-        ctx.fillStyle = accentHex;
-        for (let i = 0; i < ball.trail.length - 1; i++) {
-          const trailYPx = groundY - (ball.trail[i] * pixelsPerMeter) - (visualRPx - baseRPx);
-          const trailR = visualRPx * (0.3 + 0.5 * (i / ball.trail.length));
-          ctx.globalAlpha = (i / ball.trail.length) * (isLight ? 0.12 : 0.18);
-          ctx.beginPath(); ctx.arc(ball.x, trailYPx, trailR, 0, Math.PI * 2); ctx.fill();
-        }
-        ctx.globalAlpha = 1;
+      let steps = 0;
+      while (physicsAccumulator >= fixedDt && steps < maxSubsteps) {
+        const snapA = (ballA && !ballA.settled) ? { y: ballA.body.position.y, v: ballA.body.velocity.y } : null;
+        const snapB = (ballB && !ballB.settled) ? { y: ballB.body.position.y, v: ballB.body.velocity.y } : null;
+
+        world.step(fixedDt);
+
+        if (snapA) resolveBallSubstep(ballA, snapA.y, snapA.v, fixedDt, g);
+        if (snapB) resolveBallSubstep(ballB, snapB.y, snapB.v, fixedDt, g);
+
+        physicsAccumulator -= fixedDt;
+        steps++;
+      }
+    }
+
+    function syncBallVisuals(ball, frameDt, hudEl, hudHEl, hudVEl) {
+      // Damped spring recovery for squash-and-stretch deformation
+      const stiffness = 260;
+      const damping = 18;
+      const accel = (1.0 - ball.scaleY) * stiffness - ball.scaleVel * damping;
+      ball.scaleVel += accel * frameDt;
+      ball.scaleY = Math.max(0.6, Math.min(1.22, ball.scaleY + ball.scaleVel * frameDt));
+
+      // Volume-preserving horizontal stretch: sx * sy * sz = 1
+      const scaleXZ = 1 / Math.sqrt(ball.scaleY);
+
+      // True physical clearance above ground plane
+      const heightAboveGround = Math.max(0, ball.body.position.y - ball.rM);
+      const centerY = heightAboveGround + ball.visualR * ball.scaleY;
+
+      ball.mesh.position.set(ball.x, centerY, 0);
+      ball.mesh.scale.set(
+        ball.visualR * scaleXZ,
+        ball.visualR * ball.scaleY,
+        ball.visualR * scaleXZ
+      );
+
+      // Keep equatorial indicator ring aligned with ball
+      ball.ringMesh.position.set(ball.x, centerY, 0);
+      ball.ringMesh.scale.set(scaleXZ, 1, scaleXZ);
+
+      // Update vertical plumb laser line
+      const posAttr = ball.plumbLine.geometry.attributes.position;
+      posAttr.setXYZ(1, ball.x, centerY, 0);
+      posAttr.needsUpdate = true;
+
+      // Update pooled 3D motion trail
+      if (isDropped && !isPaused && !ball.settled) {
+        ball.trail.push(centerY);
+        if (ball.trail.length > ball.trailMeshes.length) ball.trail.shift();
+      } else if (!isDropped) {
+        ball.trail.length = 0;
       }
 
-      // Contact shadow: grows tighter/darker as the ball nears the ground, giving a depth cue
-      const groundDist = Math.max(0, ball.yM - ball.rM);
-      const shadowT = Math.max(0, 1 - groundDist / (visualMaxM * 0.35));
-      const shadowRx = visualRPx * (1.0 + shadowT * 0.5);
-      const shadowAlpha = (isLight ? 0.08 : 0.3) + shadowT * (isLight ? 0.12 : 0.25);
-      ctx.strokeStyle = isLight ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)";
-      ctx.beginPath(); ctx.moveTo(ball.x, yPx); ctx.lineTo(ball.x, groundY); ctx.stroke();
-      
-      ctx.fillStyle = isLight ? `rgba(0,0,0,${shadowAlpha})` : `rgba(0,0,0,${shadowAlpha})`;
-      ctx.beginPath(); ctx.ellipse(ball.x, groundY, shadowRx, 4, 0, 0, Math.PI*2); ctx.fill();
-      
-      ctx.save(); ctx.translate(ball.x, yPx);
-      const grad = ctx.createRadialGradient(-visualRPx * 0.3, -visualRPx * 0.3, visualRPx * 0.1, 0, 0, visualRPx);
-      grad.addColorStop(0, "#ffffff"); grad.addColorStop(0.4, accentHex); grad.addColorStop(1, isLight ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.9)");
-      ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, visualRPx, 0, Math.PI*2); ctx.fill(); ctx.restore();
-      
-      ctx.fillStyle = isLight ? "#000" : "#fff"; ctx.font = "bold 13px sans-serif";
-      ctx.fillText((ball.yM - ball.rM).toFixed(2) + "m", ball.x + visualRPx + 10, yPx + 4);
+      const tLen = ball.trail.length;
+      for (let i = 0; i < ball.trailMeshes.length; i++) {
+        const tm = ball.trailMeshes[i];
+        if (i < tLen - 1 && isDropped && !ball.settled) {
+          const ratio = (i + 1) / tLen;
+          tm.visible = true;
+          tm.position.set(ball.x, ball.trail[i], 0);
+          const tr = ball.visualR * (0.22 + 0.45 * ratio);
+          tm.scale.set(tr, tr, tr);
+          tm.material.opacity = ratio * (isLight ? 0.22 : 0.28);
+        } else {
+          tm.visible = false;
+        }
+      }
+
+      // Project live 3D telemetry HUD tag to screen coordinates
+      const cw = canvasContainer.clientWidth;
+      const ch = canvasContainer.clientHeight;
+      if (cw > 0 && ch > 0) {
+        _projVec.set(ball.x + ball.visualR * 1.35, centerY, 0);
+        _projVec.project(camera);
+
+        if (_projVec.z > 1) {
+          hudEl.style.opacity = '0';
+        } else {
+          let sx = (_projVec.x * 0.5 + 0.5) * cw + 8;
+          let sy = (-_projVec.y * 0.5 + 0.5) * ch;
+          sx = Math.max(12, Math.min(cw - 110, sx));
+          sy = Math.max(58, Math.min(ch - 36, sy));
+          hudEl.style.opacity = '1';
+          hudEl.style.transform = `translate3d(${sx.toFixed(1)}px, ${sy.toFixed(1)}px, 0) translateY(-50%)`;
+          hudHEl.textContent = heightAboveGround.toFixed(2) + " m";
+          hudVEl.textContent = Math.abs(ball.body.velocity.y).toFixed(2) + " m/s";
+        }
+      }
     }
 
     function loop(timestamp) {
-      if (!lastTime) lastTime = timestamp; 
-      const dt = Math.min((timestamp - lastTime) / 1000, 0.035); 
+      if (!lastTime) lastTime = timestamp;
+      const dt = Math.min((timestamp - lastTime) / 1000, 0.035);
       lastTime = timestamp;
+
       if (simScreen.classList.contains("active") && ballA) {
-        const w = canvas.parentElement.clientWidth, h = canvas.parentElement.clientHeight;
-        ctx.clearRect(0, 0, w, h);
-        
-        ctx.strokeStyle = isLight ? "rgba(15, 23, 42, 0.2)" : "rgba(255, 255, 255, 0.08)";
-        ctx.fillStyle = isLight ? "rgba(15, 23, 42, 0.6)" : "rgba(255, 255, 255, 0.45)";
-        ctx.font = "10px monospace"; ctx.lineWidth = 1;
-        let stepM = visualMaxM > 50 ? 10 : visualMaxM > 20 ? 5 : visualMaxM > 10 ? 2 : 1;
-        for (let m = 0; m <= visualMaxM; m += stepM) {
-          const yPx = groundY - m * pixelsPerMeter;
-          if (yPx < 75) break; 
-          ctx.beginPath(); ctx.moveTo(42, yPx); ctx.lineTo(42 + 10, yPx); ctx.stroke();
-          ctx.fillText(`${m}m`, 16, yPx + 4);
-        }
-
-        ctx.strokeStyle = isLight ? "rgba(15, 23, 42, 0.2)" : "rgba(255,255,255,0.15)";
-        ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(10, groundY); ctx.lineTo(w-10, groundY); ctx.stroke();
-
         if (isDropped && !isPaused) {
-          const baseSteps = 5;
-          const totalSteps = baseSteps * simSpeed;
-          for(let step=0; step<totalSteps; step++) { 
-            processPhysics(ballA, dt/baseSteps, false); 
-            if (ballB) processPhysics(ballB, dt/baseSteps, true); 
-          }
-          // Push trail ONCE per rendered frame (not per substep) so the 14-item buffer
-          // always spans ~233ms of visible history regardless of simSpeed.
-          if (!ballA.settled) { ballA.trail.push(ballA.yM); if (ballA.trail.length > 14) ballA.trail.shift(); }
-          if (ballB && !ballB.settled) { ballB.trail.push(ballB.yM); if (ballB.trail.length > 14) ballB.trail.shift(); }
+          stepPhysics(dt);
+          updateVFX(dt);
         }
-        drawBall(ballA); if(ballB) drawBall(ballB);
+
+        // Smooth camera framing transition on height/mode changes or Reset View
+        if (isCameraTransitioning) {
+          const lerpAlpha = 1 - Math.exp(-8 * dt);
+          camera.position.lerp(targetCamPos, lerpAlpha);
+          controls.target.lerp(targetControlsTarget, lerpAlpha);
+          if (camera.position.distanceTo(targetCamPos) < 0.02 && controls.target.distanceTo(targetControlsTarget) < 0.02) {
+            camera.position.copy(targetCamPos);
+            controls.target.copy(targetControlsTarget);
+            isCameraTransitioning = false;
+          }
+        }
+        controls.update();
+
+        syncBallVisuals(ballA, dt, hudA, hudAH, hudAV);
+        if (ballB) syncBallVisuals(ballB, dt, hudB, hudBH, hudBV);
+
+        renderer.render(scene, camera);
       }
+
       requestAnimationFrame(loop);
     }
-    resizeCanvas(); prepareSim(); requestAnimationFrame(loop);
+
+    resizeCanvas();
+    prepareSim(true);
+    requestAnimationFrame(loop);
 
     const getSub = (n) => ['₀','₁','₂','₃','₄','₅','₆','₇','₈','₉'][n] || n;
     const getSup = (n) => {
